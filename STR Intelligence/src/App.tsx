@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { formatLandArea } from "./listing-format";
+import { InvestmentCriteriaPanel } from "./InvestmentCriteriaPanel";
 
 type PropertyIntent = "homes" | "land";
 const SUPPORTED_LOCATIONS = ["Oakhurst, CA", "Mariposa, CA"] as const;
@@ -201,6 +202,7 @@ export default function App() {
               <span className="assistant-avatar" aria-hidden="true">SI</span>
               <div>
                 <strong>{searchOutcome.message}</strong>
+                {searchRequest?.source === "zillow_existing_home" && Boolean(searchOutcome.listings?.length) && <InvestmentCriteriaPanel />}
                 {searchOutcome.listings?.map((listing, index) => (
                   <article className="listing-result" key={`${listing.url ?? listing.address ?? "listing"}-${index}`}>
                     <div className="listing-result__layout">

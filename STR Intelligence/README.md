@@ -76,4 +76,6 @@ Automated tests use fixtures and injected repositories; they do not consume Apif
 
 - **Phases 1-2 complete:** application foundation, schema, provider ingestion, normalization, validation, deduplication, and immutable snapshots.
 - **Phase 3 complete:** shared workflow state, deterministic routing, LangGraph Home/Land execution, live Node API, and React integration.
-- **Next:** investment-analysis workflows using persisted listing history, financing assumptions, STR revenue/expense modeling, ranking, and review.
+- **Phase 4 - Attention Screen:** 4.1 criteria UI; 4.2 criteria contract/default profile and backend propagation; 4.3 transparent deterministic evaluator; 4.4 stored-listing batch evaluation; 4.5 Review now/Promising/Low priority/Ineligible bands; 4.6 presentation, manual override, and comparator handoff; 4.7 end-to-end verification and persistence refinements.
+- **Phase 5 - STR Comparator:** Airbnb-backed comparable analysis for promoted Home listings.
+- **Later:** weekly automation and operational scheduling.
