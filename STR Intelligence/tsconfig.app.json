@@ -14,6 +14,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
+    "tsBuildInfoFile": "/private/tmp/str-intelligence-week-3.tsbuildinfo",
     "jsx": "react-jsx"
   },
   "include": ["src"]

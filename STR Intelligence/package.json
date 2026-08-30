@@ -5,18 +5,32 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev:api": "node --env-file=.env --import tsx server/api/server.ts",
+    "server:check": "tsc -p tsconfig.server.json --pretty false",
+    "config:check": "node --env-file=.env --import tsx server/config-check.ts",
+    "test": "node --test --import tsx server/ingest/run.test.ts server/workflow/state.test.ts server/workflow/route.test.ts server/workflow/graph.test.ts server/workflow/home-ingestion-node.test.ts server/workflow/land-ingestion-node.test.ts server/api/property-search.test.ts server/sources/apify/transport.test.ts src/App.test.ts",
+    "test:apify": "node --test --import tsx server/sources/apify/transport.test.ts",
+    "test:api": "node --test --import tsx server/api/property-search.test.ts",
+    "test:graph": "node --test --import tsx server/workflow/graph.test.ts server/workflow/home-ingestion-node.test.ts server/workflow/land-ingestion-node.test.ts",
+    "ingest:fixture": "node --env-file=.env --import tsx server/ingest/cli.ts fixture",
+    "ingest:live": "node --env-file=.env --import tsx server/ingest/cli.ts live",
+    "build": "tsc -b && vite build --configLoader runner",
     "preview": "vite preview",
     "check": "tsc -b --pretty false"
   },
   "dependencies": {
+    "@langchain/langgraph": "^1.4.13",
+    "@supabase/supabase-js": "^2.112.4",
+    "apify-client": "^2.25.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@types/node": "^24.3.0",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.7.0",
+    "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vite": "^7.1.2"
   }

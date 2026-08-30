@@ -1,0 +1,50 @@
+[
+  {
+    "id": "zpid-001",
+    "url": "https://www.zillow.com/homedetails/1-Oakhurst-CA/1_zpid/",
+    "discoveredAt": "2026-08-29T12:00:00.000Z",
+    "title": "1 Oakhurst Rd",
+    "address": "1 Oakhurst Rd, Oakhurst, CA 93644",
+    "city": "Oakhurst",
+    "county": "Madera County",
+    "state": "CA",
+    "postalCode": "93644",
+    "price": 389000,
+    "beds": 3,
+    "baths": 2,
+    "sqft": 1450,
+    "lotSqft": 12197,
+    "propertyType": "Single Family Residence",
+    "statusText": "For sale",
+    "description": "Turnkey existing home suitable for STR modeling.",
+    "amenities": ["garage", "fireplace"]
+  },
+  {
+    "id": "zpid-001",
+    "url": "https://www.zillow.com/homedetails/1-Oakhurst-CA/1_zpid/",
+    "discoveredAt": "2026-08-29T12:00:00.000Z",
+    "title": "1 Oakhurst Rd duplicate",
+    "address": "1 Oakhurst Rd, Oakhurst, CA 93644",
+    "city": "Oakhurst",
+    "county": "Madera County",
+    "state": "CA",
+    "postalCode": "93644",
+    "price": 389000,
+    "beds": 3,
+    "baths": 2,
+    "sqft": 1450,
+    "lotSqft": 12197,
+    "propertyType": "Single Family Residence",
+    "statusText": "For sale",
+    "description": "Duplicate record to test dedupe.",
+    "amenities": ["garage", "fireplace"]
+  },
+  {
+    "error": true,
+    "code": "crawler_page_structure",
+    "message": "Zillow page structure changed and provider crawler could not continue.",
+    "raw": {
+      "provider": "bright-data"
+    }
+  }
+]

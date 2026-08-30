@@ -1,27 +1,79 @@
 # STR Intelligence
 
-Stage 1.0 establishes the base application shell for the STR Intelligence project in the saved `Week 3` directory.
+STR Intelligence is a short-term-rental investment research application that collects current Zillow listings, converts them into a canonical property model, and preserves listing history for later investment analysis.
 
-## Stage 1.0
+## Architecture
 
-- React + TypeScript scaffold with Vite.
-- Frontend structure prepared for later API, workflow, adapter, and persistence modules.
-- No credentials are required yet.
+- **React + Vite + TypeScript** provides the end-user conversational search and listing cards.
+- **Node.js** validates browser requests and keeps provider and database credentials server-side.
+- **LangGraph** routes shared workflow state to deterministic Home or Land ingestion nodes.
+- **Apify** runs the configured Zillow Search Actor with source-specific filters and a five-record maximum.
+- **Supabase/PostgreSQL** stores markets, source runs, canonical homes/parcels, source mappings, and immutable listing snapshots.
 
-## Stage 1 Roadmap
+The Home and Land branches share normalization, validation, deduplication, and persistence. Land ingestion fails closed on mixed provider output: only Zillow `LOT`/`LAND` records are accepted, and parcel cards omit home-only metrics.
 
-- 1.1 Supabase schema and connection
-- 1.2 Bright Data Zillow ingestion
-- 1.3 Normalization, validation, deduplication, weekly snapshots
-- 1.4 Land.com adapter reusing the same source interface
+## Setup
 
-## Architecture Note
+1. Install dependencies with `npm install`.
+2. Create `.env` from `.env.example` and provide values for the required variables below.
+3. Apply the SQL files in `supabase/migrations` to the configured Supabase project.
+4. Run `npm run config:check` to verify server configuration without printing values.
 
-Stage 1 begins with an orchestrated ingestion pipeline. Scraping feeds structured source records into validation and reflection after collection, rather than baking those checks into the scraper itself.
+Environment variable names:
 
-## Scripts
+- `APIFY_API_TOKEN`
+- `APIFY_ZILLOW_ACTOR_ID`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `VITE_APP_NAME`
+- `VITE_DEFAULT_LOOKBACK_DAYS`
+- `VITE_MAX_LOOKBACK_DAYS`
 
-- `npm run dev`
-- `npm run build`
-- `npm run check`
-- `npm run preview`
+`APIFY_API_TOKEN`, `APIFY_ZILLOW_ACTOR_ID`, and `SUPABASE_SERVICE_ROLE_KEY` are server-only. Never prefix secrets with `VITE_`.
+
+## Run Locally
+
+Start the live API in the first terminal:
+
+```bash
+npm run dev:api
+```
+
+Start the frontend in a second terminal:
+
+```bash
+npm run dev
+```
+
+Vite proxies `/api` to the Node API at `http://127.0.0.1:8787`.
+
+## Current Behavior
+
+- Supported locations: Oakhurst, California and Mariposa, California.
+- Default location: Oakhurst.
+- Default lookback: 7 days.
+- Maximum provider records per request: 5.
+- **Homes:** accepts existing-home Zillow records and displays home and lot details when available.
+- **Land:** accepts parcel-only Zillow records and displays price, location, image, source descriptors, and parcel acreage/area when available.
+- Provider payloads, credentials, workflow identifiers, and database identifiers never enter the public response DTO.
+
+## Verification
+
+```bash
+npm test
+npm run test:apify
+npm run test:api
+npm run test:graph
+npm run server:check
+npm run check
+npm run build
+```
+
+Automated tests use fixtures and injected repositories; they do not consume Apify credits or write to live Supabase.
+
+## Roadmap
+
+- **Phases 1-2 complete:** application foundation, schema, provider ingestion, normalization, validation, deduplication, and immutable snapshots.
+- **Phase 3 complete:** shared workflow state, deterministic routing, LangGraph Home/Land execution, live Node API, and React integration.
+- **Next:** investment-analysis workflows using persisted listing history, financing assumptions, STR revenue/expense modeling, ranking, and review.
