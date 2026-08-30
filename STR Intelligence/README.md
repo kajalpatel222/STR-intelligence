@@ -59,6 +59,11 @@ Vite proxies `/api` to the Node API at `http://127.0.0.1:8787`.
 - **Investment criteria defaults:** Home results load and save a server-managed default budget, improvement reserve, and Strict/Flexible preference. The profile is intentionally a singleton until authentication introduces per-user ownership.
 - Criteria are captured in workflow state and can be applied to the current Home results without rerunning the property search. They still do not change ingestion or routing.
 - Each evaluated Home card shows a deterministic Attention Score, a separate evidence-based Confidence Score, and concise reasons. Land remains outside the Attention Screen.
+- Evaluated Homes receive a transparent priority band: Review now, Promising, Low priority, or Ineligible. Review now requires Attention 75+ and Confidence 65+; strict-limit violations and unscorable listings are Ineligible.
+- After criteria are applied, current Home results are ordered by highest Attention Score, then Confidence Score; unevaluated Home and Land searches retain provider order.
+- Evaluated Home cards support persisted Promote, Hold, or Dismiss radio decisions. Detailed scoring evidence stays behind a compact disclosure; comparator handoff remains subsequent work.
+- The visible criteria use a maximum purchase budget and maximum improvement reserve; the hidden minimum purchase budget defaults to zero.
+- The backend can evaluate the latest snapshot of every stored Home as a batch and persist immutable evaluation history. A stored-listings screen remains deferred.
 - Provider payloads, credentials, workflow identifiers, and database identifiers never enter the public response DTO.
 
 ## Verification
@@ -79,6 +84,6 @@ Automated tests use fixtures and injected repositories; they do not consume Apif
 
 - **Phases 1-2 complete:** application foundation, schema, provider ingestion, normalization, validation, deduplication, and immutable snapshots.
 - **Phase 3 complete:** shared workflow state, deterministic routing, LangGraph Home/Land execution, live Node API, and React integration.
-- **Phase 4 - Attention Screen:** 4.1 criteria UI complete; 4.2 validated contract, saved default profile, and workflow propagation complete; 4.3 transparent deterministic Attention and Confidence evaluation complete; 4.4 stored-listing batch evaluation; 4.5 Review now/Promising/Low priority/Ineligible bands; 4.6 presentation, manual override, and comparator handoff; 4.7 end-to-end verification and persistence refinements.
+- **Phase 4 - Attention Screen:** criteria controls and saved defaults, deterministic Attention/Confidence scoring, stored-home batch evaluation history, priority bands, score-ranked results, and persisted manual review decisions are complete. The optional stored-listings screen remains deferred.
 - **Phase 5 - STR Comparator:** Airbnb-backed comparable analysis for promoted Home listings.
 - **Later:** weekly automation and operational scheduling.

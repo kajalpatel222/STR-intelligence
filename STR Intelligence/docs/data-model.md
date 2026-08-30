@@ -108,6 +108,26 @@ Stores the reusable Attention Screen defaults managed through the Node API.
 - RLS is enabled with no browser policy; only the server service role may access this table.
 - A later authentication phase can replace the singleton key with user ownership without changing the public criteria contract.
 
+### `attention_evaluation_runs`
+
+Append-only batch records for stored-home Attention evaluation.
+
+- Stores the exact criteria snapshot used for the batch.
+- Records evaluated, unscorable, and failed totals plus completion status.
+- Provides the parent identity for immutable per-property outcomes.
+
+### `attention_evaluations`
+
+One immutable outcome for each canonical property and latest listing snapshot in a batch.
+
+- Stores Attention and Confidence scores, deterministic priority band/reason, category breakdowns, reasons, risks, strict-limit violations, and user-facing explanations.
+- Preserves unscorable and contained-failure outcomes rather than silently omitting them.
+- RLS is enabled with no browser policy; batch writes remain behind the Node service-role boundary.
+
+### `listing_reviews`
+
+Stores the current Promote, Hold, or Dismiss decision for each canonical property. The browser sends only the public listing URL; Node resolves the canonical property and performs the service-role write. RLS remains closed to direct browser access.
+
 ### `str_analysis_runs`
 
 Stores the structured financial analysis for a property or listing snapshot.

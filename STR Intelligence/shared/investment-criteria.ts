@@ -14,7 +14,7 @@ export type InvestmentCriteriaValidationError = Readonly<{
 }>;
 
 export const DEFAULT_INVESTMENT_CRITERIA: InvestmentCriteria = Object.freeze({
-  minimumPurchaseBudgetUsd: 350_000,
+  minimumPurchaseBudgetUsd: 0,
   maximumPurchaseBudgetUsd: 400_000,
   maximumImprovementReserveUsd: 40_000,
   mode: "flexible",

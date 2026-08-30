@@ -4,6 +4,8 @@ import { InvestmentCriteriaPanel } from "./InvestmentCriteriaPanel";
 import type { PublicAttentionEvaluation } from "../shared/attention-api";
 import type { InvestmentCriteria } from "../shared/investment-criteria";
 import { evaluateCurrentListings } from "./attention-client";
+import { ListingReviewControls, type ListingReviewDecision } from "./ListingReviewControls";
+import { loadListingReviews, saveListingReview } from "./listing-review-client";
 
 type PropertyIntent = "homes" | "land";
 const SUPPORTED_LOCATIONS = ["Oakhurst, CA", "Mariposa, CA"] as const;
@@ -52,7 +54,10 @@ export default function App() {
   const [searchOutcome, setSearchOutcome] = useState<SearchOutcome | null>(null);
   const [attentionEvaluations, setAttentionEvaluations] = useState<PublicAttentionEvaluation[]>([]);
   const [isApplyingCriteria, setIsApplyingCriteria] = useState(false);
+  const [listingReviews, setListingReviews] = useState<Record<number, ListingReviewDecision>>({});
+  const [reviewSaveStates, setReviewSaveStates] = useState<Record<number, "saving" | "saved" | "error">>({});
   const filteredLocations = SUPPORTED_LOCATIONS.filter((option) => option.toLowerCase().includes(location.toLowerCase()));
+  const orderedListingIndexes = rankListingIndexes(searchOutcome?.listings?.length ?? 0, attentionEvaluations);
 
   function chooseLocation(option: SupportedLocation) {
     setLocation(option);
@@ -85,6 +90,8 @@ export default function App() {
       setSearchRequest(null);
       setSearchOutcome(null);
       setAttentionEvaluations([]);
+      setListingReviews({});
+      setReviewSaveStates({});
     }
   }
 
@@ -120,6 +127,8 @@ export default function App() {
     setSearchRequest(request);
     setSearchOutcome(null);
     setAttentionEvaluations([]);
+    setListingReviews({});
+    setReviewSaveStates({});
     setIsSearching(true);
 
     try {
@@ -130,6 +139,20 @@ export default function App() {
       });
       const outcome = await response.json() as SearchOutcome;
       setSearchOutcome(outcome);
+      const listingUrls = (outcome.listings ?? []).flatMap((listing) => listing.url ? [listing.url] : []);
+      if (propertyType === "homes" && listingUrls.length) {
+        try {
+          const savedReviews = await loadListingReviews(listingUrls);
+          const decisions: Record<number, ListingReviewDecision> = {};
+          (outcome.listings ?? []).forEach((listing, index) => {
+            const saved = savedReviews.find((review) => review.listingUrl === listing.url);
+            if (saved) decisions[index] = saved.decision;
+          });
+          setListingReviews(decisions);
+        } catch {
+          setReviewSaveStates({});
+        }
+      }
     } catch {
       setSearchOutcome({ status: "unavailable", message: "Property search is temporarily unavailable. Please try again later." });
     } finally {
@@ -145,6 +168,26 @@ export default function App() {
       setAttentionEvaluations(await evaluateCurrentListings(criteria, listings));
     } finally {
       setIsApplyingCriteria(false);
+    }
+  }
+
+  async function updateListingReview(index: number, decision: ListingReviewDecision) {
+    const listingUrl = searchOutcome?.listings?.[index]?.url;
+    if (!listingUrl) return;
+    const priorDecision = listingReviews[index];
+    setListingReviews((reviews) => ({ ...reviews, [index]: decision }));
+    setReviewSaveStates((states) => ({ ...states, [index]: "saving" }));
+    try {
+      await saveListingReview(listingUrl, decision);
+      setReviewSaveStates((states) => ({ ...states, [index]: "saved" }));
+    } catch {
+      setListingReviews((reviews) => {
+        const next = { ...reviews };
+        if (priorDecision) next[index] = priorDecision;
+        else delete next[index];
+        return next;
+      });
+      setReviewSaveStates((states) => ({ ...states, [index]: "error" }));
     }
   }
 
@@ -224,14 +267,17 @@ export default function App() {
               <div>
                 <strong>{searchOutcome.message}</strong>
                 {searchRequest?.source === "zillow_existing_home" && Boolean(searchOutcome.listings?.length) && <InvestmentCriteriaPanel onApply={applyCriteria} isApplying={isApplyingCriteria} />}
-                {searchOutcome.listings?.map((listing, index) => {
+                {orderedListingIndexes.map((index) => {
+                  const listing = searchOutcome.listings![index]!;
                   const evaluation = attentionEvaluations.find((item) => item.listingIndex === index);
+                  const propertyLabel = listing.address ?? listing.title ?? "this home";
+                  const review = listingReviews[index];
                   return (
                   <article className="listing-result" key={`${listing.url ?? listing.address ?? "listing"}-${index}`}>
                     <div className="listing-result__layout">
                       {listing.imageUrl ? <img className="listing-result__image" src={listing.imageUrl} alt={`Property at ${listing.address ?? listing.title ?? "this listing"}`} loading="lazy" /> : <div className="listing-result__image listing-result__image--fallback" role="img" aria-label="Property image unavailable">⌂</div>}
                       <div className="listing-result__content">
-                        <div className="listing-result__header"><div><h3>{listing.title ?? listing.address ?? (searchRequest?.source === "zillow_land" ? "Land for sale" : "Home for sale")}</h3><p>{[listing.city, listing.state, listing.postalCode].filter(Boolean).join(", ")}</p></div><div className="listing-result__price-stack">{listing.price !== undefined && <strong className="listing-result__price">{formatPrice(listing.price)}</strong>}{evaluation && <div className="listing-result__scores" aria-label="Property evaluation scores"><span className="score-tag"><strong>{formatScore(evaluation.result.attentionScore)}</strong><small>Attention Score</small></span><span className="score-tag score-tag--confidence"><strong>{formatScore(evaluation.result.confidenceScore)}</strong><small>Confidence Score</small></span></div>}</div></div>
+                        <div className="listing-result__header"><div><h3>{listing.title ?? listing.address ?? (searchRequest?.source === "zillow_land" ? "Land for sale" : "Home for sale")}</h3><p>{[listing.city, listing.state, listing.postalCode].filter(Boolean).join(", ")}</p>{evaluation && <span className={`priority-badge priority-badge--${evaluation.priority.band}`}>{formatPriorityBand(evaluation.priority.band)}</span>}</div><div className="listing-result__price-stack">{listing.price !== undefined && <strong className="listing-result__price">{formatPrice(listing.price)}</strong>}{evaluation && <div className="listing-result__scores" aria-label="Property evaluation scores"><span className="score-tag"><strong>{formatScore(evaluation.result.attentionScore)}</strong><small>Attention Score</small></span><span className="score-tag score-tag--confidence"><strong>{formatScore(evaluation.result.confidenceScore)}</strong><small>Confidence Score</small></span></div>}</div></div>
                     {(listing.propertyType || listing.zoningText) && <p className="listing-result__descriptor">{[listing.propertyType, listing.zoningText].filter(Boolean).join(" · ")}</p>}
                     <dl>
                       {searchRequest?.source !== "zillow_land" && listing.beds !== undefined && <div><dt>Beds</dt><dd>{listing.beds}</dd></div>}
@@ -241,7 +287,8 @@ export default function App() {
                         formatLandArea(listing) && <div><dt>Parcel size</dt><dd>{formatLandArea(listing)}</dd></div>
                       ) : listing.lotSqft !== undefined && listing.lotSqft > 0 && <div><dt>Lot area</dt><dd>{formatLotArea(listing.lotSqft)}</dd></div>}
                     </dl>
-                    {evaluation && <div className="listing-result__reasons">{evaluation.explanation.positiveDrivers[0] && <p>{evaluation.explanation.positiveDrivers[0]}</p>}{(evaluation.explanation.concerns[0] ?? evaluation.explanation.missingEvidence[0]) && <p>{evaluation.explanation.concerns[0] ?? evaluation.explanation.missingEvidence[0]}</p>}</div>}
+                    {evaluation && <details className="listing-insights"><summary>Why this ranking</summary><div><p>{evaluation.priority.reason}</p>{evaluation.explanation.positiveDrivers.slice(0, 2).map((reason) => <p key={reason}>{reason}</p>)}{evaluation.explanation.concerns.slice(0, 2).map((reason) => <p key={reason} className="is-concern">{reason}</p>)}{evaluation.explanation.missingEvidence.slice(0, 2).map((reason) => <p key={reason} className="is-missing">{reason}</p>)}</div></details>}
+                    {evaluation && <ListingReviewControls propertyLabel={propertyLabel} groupName={`review-${index}`} decision={review} isSaving={reviewSaveStates[index] === "saving"} feedback={reviewSaveStates[index] === "saving" ? "Saving…" : reviewSaveStates[index] === "saved" ? "Saved" : reviewSaveStates[index] === "error" ? "Decision could not be saved. Try again." : undefined} onDecision={(decision) => void updateListingReview(index, decision)} />}
                     {listing.url && <a href={listing.url} target="_blank" rel="noreferrer">View listing <span aria-hidden="true">↗</span></a>}
                       </div>
                     </div>
@@ -283,4 +330,26 @@ function formatLotArea(lotSqft: number) {
 
 function formatScore(score: number | null) {
   return score === null ? "—" : Math.round(score).toString();
+}
+
+function formatPriorityBand(band: PublicAttentionEvaluation["priority"]["band"]) {
+  return { review_now: "Review now", promising: "Promising", low_priority: "Low priority", ineligible: "Ineligible" }[band];
+}
+
+export function rankListingIndexes(listingCount: number, evaluations: readonly PublicAttentionEvaluation[]) {
+  const indexes = Array.from({ length: listingCount }, (_, index) => index);
+  if (evaluations.length === 0) return indexes;
+  const byIndex = new Map(evaluations.map((evaluation) => [evaluation.listingIndex, evaluation]));
+  return indexes.sort((left, right) => {
+    const leftEvaluation = byIndex.get(left);
+    const rightEvaluation = byIndex.get(right);
+    const attentionDifference = scoreForSort(rightEvaluation?.result.attentionScore) - scoreForSort(leftEvaluation?.result.attentionScore);
+    if (attentionDifference !== 0) return attentionDifference;
+    const confidenceDifference = scoreForSort(rightEvaluation?.result.confidenceScore) - scoreForSort(leftEvaluation?.result.confidenceScore);
+    return confidenceDifference !== 0 ? confidenceDifference : left - right;
+  });
+}
+
+function scoreForSort(score: number | null | undefined) {
+  return typeof score === "number" && Number.isFinite(score) ? score : -1;
 }

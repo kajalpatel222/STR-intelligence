@@ -6,7 +6,7 @@ import {
 } from "./investment-criteria.js";
 
 const valid = {
-  minimumPurchaseBudgetUsd: 350_000,
+  minimumPurchaseBudgetUsd: 0,
   maximumPurchaseBudgetUsd: 400_000,
   maximumImprovementReserveUsd: 40_000,
   mode: "strict" as const,

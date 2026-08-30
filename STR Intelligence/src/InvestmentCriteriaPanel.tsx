@@ -22,7 +22,6 @@ export function InvestmentCriteriaPanel({
   isApplying = false,
   onApply,
 }: InvestmentCriteriaPanelProps) {
-  const [minimumBudget, setMinimumBudget] = useState<number>(DEFAULT_INVESTMENT_CRITERIA.minimumPurchaseBudgetUsd);
   const [maximumBudget, setMaximumBudget] = useState<number>(DEFAULT_INVESTMENT_CRITERIA.maximumPurchaseBudgetUsd);
   const [improvementReserve, setImprovementReserve] = useState<number>(DEFAULT_INVESTMENT_CRITERIA.maximumImprovementReserveUsd);
   const [mode, setMode] = useState<AttentionMode>(DEFAULT_INVESTMENT_CRITERIA.mode);
@@ -33,7 +32,6 @@ export function InvestmentCriteriaPanel({
     let active = true;
     client.load().then((criteria) => {
       if (!active) return;
-      setMinimumBudget(criteria.minimumPurchaseBudgetUsd);
       setMaximumBudget(criteria.maximumPurchaseBudgetUsd);
       setImprovementReserve(criteria.maximumImprovementReserveUsd);
       setMode(criteria.mode);
@@ -83,7 +81,7 @@ export function InvestmentCriteriaPanel({
 
   function currentCriteria() {
     return validateInvestmentCriteria({
-      minimumPurchaseBudgetUsd: minimumBudget,
+      minimumPurchaseBudgetUsd: 0,
       maximumPurchaseBudgetUsd: maximumBudget,
       maximumImprovementReserveUsd: improvementReserve,
       mode,
@@ -101,21 +99,12 @@ export function InvestmentCriteriaPanel({
       </div>
 
       <div className="criteria-fields">
-        <fieldset className="criteria-budget">
-          <legend>Purchase budget</legend>
-          <label>
-            <span>Minimum</span>
-            <input type="number" inputMode="numeric" min="0" step="5000" value={minimumBudget} onChange={(event) => setMinimumBudget(Number(event.target.value))} />
-            <small>{formatCriteriaCurrency(minimumBudget)}</small>
-          </label>
-          <label>
-            <span>Maximum</span>
-            <input type="number" inputMode="numeric" min="0" step="5000" value={maximumBudget} onChange={(event) => setMaximumBudget(Number(event.target.value))} />
-            <small>{formatCriteriaCurrency(maximumBudget)}</small>
-          </label>
-        </fieldset>
-
-        <label className="criteria-reserve">
+        <label className="criteria-control">
+          <span>Maximum purchase budget</span>
+          <input type="number" inputMode="numeric" min="0" step="5000" value={maximumBudget} onChange={(event) => setMaximumBudget(Number(event.target.value))} />
+          <small>{formatCriteriaCurrency(maximumBudget)}</small>
+        </label>
+        <label className="criteria-control">
           <span>Maximum improvement reserve</span>
           <input type="number" inputMode="numeric" min="0" step="5000" value={improvementReserve} onChange={(event) => setImprovementReserve(Number(event.target.value))} />
           <small>{formatCriteriaCurrency(improvementReserve)}</small>

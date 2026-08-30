@@ -3,6 +3,7 @@ import type { PublicAttentionEvaluation } from "../../shared/attention-api.js";
 import type { AttentionEvaluationInput } from "../../shared/attention-evaluator.js";
 import { explainAttentionEvaluation } from "../../shared/attention-reasons.js";
 import { evaluateAttention } from "../../shared/attention-scoring.js";
+import { classifyAttentionPriority } from "../../shared/attention-priority.js";
 
 const AttentionEvaluationGraphState = Annotation.Root({
   inputs: Annotation<readonly AttentionEvaluationInput[]>(),
@@ -17,6 +18,7 @@ function evaluateCurrentBatch(state: typeof AttentionEvaluationGraphState.State)
         listingIndex,
         result,
         explanation: explainAttentionEvaluation(input, result),
+        priority: classifyAttentionPriority(result),
       });
     }),
   };

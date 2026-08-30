@@ -14,4 +14,5 @@ test("evaluates each current listing through an evaluation-only LangGraph", asyn
   assert.equal(result.evaluations.length, 2);
   assert.deepEqual(result.evaluations.map((evaluation) => evaluation.listingIndex), [0, 1]);
   assert.equal(typeof result.evaluations[0]?.result.attentionScore, "number");
+  assert.equal(result.evaluations[0]?.priority.band, "promising");
 });

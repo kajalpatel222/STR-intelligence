@@ -23,7 +23,7 @@ test("maps and saves the singleton row through an injected non-writing store", a
   assert.deepEqual(await repository.saveDefaults(criteria), criteria);
   assert.deepEqual(stored, {
     profile_key: "default",
-    minimum_purchase_budget_usd: 350000,
+    minimum_purchase_budget_usd: 0,
     maximum_purchase_budget_usd: 400000,
     maximum_improvement_reserve_usd: 40000,
     mode: "strict",

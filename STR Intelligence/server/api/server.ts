@@ -5,6 +5,8 @@ import type { IngestionTimings } from "../ingest/types.js";
 import { CriteriaDefaultsRepository } from "../criteria/repository.js";
 import { createInvestmentCriteriaHandler } from "./investment-criteria.js";
 import { handleAttentionEvaluation } from "./attention-evaluation.js";
+import { createListingReviewsHandler } from "./listing-reviews.js";
+import { ListingReviewRepository } from "../reviews/repository.js";
 
 const liveDependencies = {
   // These boundaries are emitted server-side for verification and never enter
@@ -15,6 +17,7 @@ const liveGraph = createListingRoutingGraph(liveDependencies, liveDependencies);
 const criteriaRepository = new CriteriaDefaultsRepository();
 const handlePropertySearch = createPropertySearchHandler(liveGraph, criteriaRepository);
 const handleInvestmentCriteria = createInvestmentCriteriaHandler(criteriaRepository);
+const handleListingReviews = createListingReviewsHandler(new ListingReviewRepository());
 const port = 8787;
 
 // Secrets are read only by server-side graph dependencies; this HTTP boundary
@@ -24,7 +27,9 @@ const server = createServer(async (request, response) => {
   const isCriteriaGet = request.method === "GET" && request.url === "/api/investment-criteria";
   const isCriteriaPut = request.method === "PUT" && request.url === "/api/investment-criteria";
   const isAttentionEvaluation = request.method === "POST" && request.url === "/api/attention-evaluation";
-  if (!isPropertySearch && !isCriteriaGet && !isCriteriaPut && !isAttentionEvaluation) {
+  const isReviewsQuery = request.method === "POST" && request.url === "/api/listing-reviews/query";
+  const isReviewPut = request.method === "PUT" && request.url === "/api/listing-reviews";
+  if (!isPropertySearch && !isCriteriaGet && !isCriteriaPut && !isAttentionEvaluation && !isReviewsQuery && !isReviewPut) {
     sendJson(response, 404, { status: "not_found", message: "Not found." });
     return;
   }
@@ -37,7 +42,11 @@ const server = createServer(async (request, response) => {
         ? await handleInvestmentCriteria.put(await readJson(request))
         : isAttentionEvaluation
           ? await handleAttentionEvaluation(await readJson(request))
-          : await handlePropertySearch(await readJson(request));
+          : isReviewsQuery
+            ? await handleListingReviews.get(await readJson(request))
+            : isReviewPut
+              ? await handleListingReviews.put(await readJson(request))
+              : await handlePropertySearch(await readJson(request));
     if (isPropertySearch) console.log(`Live endpoint timing ${JSON.stringify({ totalMs: performance.now() - endpointStartedAt })}`);
     sendJson(response, result.statusCode, result.body);
   } catch (error) {

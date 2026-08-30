@@ -4,9 +4,9 @@ import { DEFAULT_INVESTMENT_CRITERIA } from "./investment-criteria.js";
 import { createAttentionEvaluationInput, type AttentionEvaluationInput } from "./attention-evaluator.js";
 import { evaluateAttention } from "./attention-scoring.js";
 
-function input(overrides: Partial<AttentionEvaluationInput["facts"]> = {}, mode: "strict" | "flexible" = "flexible") {
+function input(overrides: Partial<AttentionEvaluationInput["facts"]> = {}, mode: "strict" | "flexible" = "flexible", minimumPurchaseBudgetUsd = 0) {
   return createAttentionEvaluationInput({
-    criteria: { ...DEFAULT_INVESTMENT_CRITERIA, mode },
+    criteria: { ...DEFAULT_INVESTMENT_CRITERIA, minimumPurchaseBudgetUsd, mode },
     facts: {
       listingPriceUsd: 375_000,
       propertyKind: "existing_home",
@@ -47,7 +47,7 @@ test("calculates the approved category weights and keeps confidence separate", (
 });
 
 test("treats the minimum budget as a preference and flexible overage as proportional", () => {
-  const below = evaluateAttention(input({ listingPriceUsd: 300_000 }));
+  const below = evaluateAttention(input({ listingPriceUsd: 300_000 }, "flexible", 350_000));
   assert.equal(below.strictLimitViolations.length, 0);
   assert.equal(below.categories.budget_fit.score, 34.3);
 
