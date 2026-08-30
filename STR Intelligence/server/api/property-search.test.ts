@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
 import { createPropertySearchHandler } from "./property-search.js";
+import { DEFAULT_INVESTMENT_CRITERIA } from "../../shared/investment-criteria.js";
 
 test("returns public listing data for a constrained home search", async () => {
   const handler = createPropertySearchHandler({
@@ -51,10 +52,40 @@ test("returns public listing data for a constrained home search", async () => {
     imageUrl: "https://photos.example.com/home.jpg",
     propertyType: undefined,
     zoningText: undefined,
+    description: undefined,
+    amenities: undefined,
+    statusText: undefined,
     url: "https://example.com/home",
   }]);
   assert.equal(JSON.stringify(result.body).includes("private-id"), false);
   assert.equal(JSON.stringify(result.body).includes("secret"), false);
+});
+
+test("snapshots saved criteria into workflow state without changing routing", async () => {
+  const handler = createPropertySearchHandler({
+    async invoke({ workflowState }) {
+      assert.deepEqual(workflowState.investmentCriteria, DEFAULT_INVESTMENT_CRITERIA);
+      assert.equal(workflowState.searchRequest.source, "zillow_existing_home");
+      return { workflowState: { ...workflowState, status: "completed", normalizedListings: [] } };
+    },
+  }, {
+    async getDefaults() { return DEFAULT_INVESTMENT_CRITERIA; },
+  });
+  const result = await handler({ propertyType: "homes", location: "Oakhurst, CA" });
+  assert.equal(result.statusCode, 200);
+});
+
+test("falls back to safe criteria when optional saved defaults are unavailable", async () => {
+  const handler = createPropertySearchHandler({
+    async invoke({ workflowState }) {
+      assert.deepEqual(workflowState.investmentCriteria, DEFAULT_INVESTMENT_CRITERIA);
+      return { workflowState: { ...workflowState, status: "completed", normalizedListings: [] } };
+    },
+  }, {
+    async getDefaults() { throw new Error("profile table unavailable"); },
+  });
+  const result = await handler({ propertyType: "homes", location: "Oakhurst, CA" });
+  assert.equal(result.statusCode, 200);
 });
 
 test("returns safe parcel data for a constrained land search", async () => {

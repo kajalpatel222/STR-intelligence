@@ -3,7 +3,7 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { formatLandArea } from "./listing-format.js";
-import { DEFAULT_INVESTMENT_CRITERIA, formatCriteriaCurrency } from "./investment-criteria.js";
+import { DEFAULT_INVESTMENT_CRITERIA, formatCriteriaCurrency } from "../shared/investment-criteria.js";
 import { InvestmentCriteriaPanel } from "./InvestmentCriteriaPanel.js";
 
 test("formats source acreage without losing parcel precision", () => {
@@ -18,12 +18,12 @@ test("does not present zero or missing parcel size", () => {
 
 test("initializes editable attention criteria around the current preference", () => {
   assert.deepEqual(DEFAULT_INVESTMENT_CRITERIA, {
-    minimumPurchaseBudget: 350000,
-    maximumPurchaseBudget: 400000,
-    maximumImprovementReserve: 40000,
+    minimumPurchaseBudgetUsd: 350000,
+    maximumPurchaseBudgetUsd: 400000,
+    maximumImprovementReserveUsd: 40000,
     mode: "flexible",
   });
-  assert.equal(formatCriteriaCurrency(DEFAULT_INVESTMENT_CRITERIA.maximumImprovementReserve), "$40,000");
+  assert.equal(formatCriteriaCurrency(DEFAULT_INVESTMENT_CRITERIA.maximumImprovementReserveUsd), "$40,000");
 });
 
 test("renders only the approved accessible investment criteria controls", () => {
@@ -34,5 +34,17 @@ test("renders only the approved accessible investment criteria controls", () => 
   assert.equal(markup.includes("STR appeal"), false);
   assert.match(markup, /Purchase budget/);
   assert.match(markup, /Maximum improvement reserve/);
-  assert.match(markup, /Your changes stay on this page for now/);
+  assert.match(markup, /apply them to the current homes/);
+  assert.match(markup, /role="tooltip"/);
+  assert.match(markup, /aria-describedby="criteria-mode-tooltip"/);
+  assert.match(markup, /aria-label="About Strict and Flexible modes"/);
+  assert.match(markup, /Save defaults/);
+  assert.match(markup, /Flexible keeps near-misses with a proportional penalty/);
+});
+
+test("renders the Apply Criteria action only when evaluation is connected", () => {
+  const withoutApply = renderToStaticMarkup(createElement(InvestmentCriteriaPanel));
+  const withApply = renderToStaticMarkup(createElement(InvestmentCriteriaPanel, { onApply: async () => undefined }));
+  assert.equal(withoutApply.includes("Apply Criteria"), false);
+  assert.equal(withApply.includes("Apply Criteria"), true);
 });

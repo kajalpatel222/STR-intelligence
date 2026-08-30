@@ -4,6 +4,7 @@ import {
   initializeListingWorkflowState,
   type WorkflowSearchRequest,
 } from "./state.js";
+import { DEFAULT_INVESTMENT_CRITERIA } from "../../shared/investment-criteria.js";
 
 const searchRequest: WorkflowSearchRequest = {
   source: "zillow_existing_home",
@@ -68,4 +69,16 @@ test("initializes workflow state with safe defaults and independent collections"
   firstCanonicalPropertyIds.push("property-1");
   assert.deepEqual(second.rawProviderRecords, []);
   assert.deepEqual(second.supabase.canonicalPropertyIds, []);
+});
+
+test("copies criteria into an immutable workflow snapshot", () => {
+  const input = { ...DEFAULT_INVESTMENT_CRITERIA };
+  const first = initializeListingWorkflowState({ workflowId: "criteria-1", searchRequest, investmentCriteria: input });
+  const second = initializeListingWorkflowState({ workflowId: "criteria-2", searchRequest, investmentCriteria: input });
+
+  input.maximumImprovementReserveUsd = 99_000;
+  assert.equal(first.investmentCriteria?.maximumImprovementReserveUsd, 40_000);
+  assert.equal(Object.isFrozen(first.investmentCriteria), true);
+  assert.notStrictEqual(first.investmentCriteria, input);
+  assert.notStrictEqual(first.investmentCriteria, second.investmentCriteria);
 });

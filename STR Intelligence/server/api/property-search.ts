@@ -3,6 +3,8 @@ import { listingRoutingGraph } from "../workflow/graph.js";
 import { initializeListingWorkflowState } from "../workflow/state.js";
 import type { ListingWorkflowState } from "../workflow/state.js";
 import { normalizeSupportedLocation } from "../markets/supported-markets.js";
+import type { InvestmentCriteriaRepository } from "../criteria/repository.js";
+import { DEFAULT_INVESTMENT_CRITERIA } from "../../shared/investment-criteria.js";
 
 type PropertySearchInput = Readonly<{
   propertyType?: unknown;
@@ -13,7 +15,10 @@ type GraphInvoker = Readonly<{
   invoke(input: { workflowState: ListingWorkflowState }): Promise<{ workflowState: ListingWorkflowState }>;
 }>;
 
-export function createPropertySearchHandler(graph: GraphInvoker = listingRoutingGraph) {
+export function createPropertySearchHandler(
+  graph: GraphInvoker = listingRoutingGraph,
+  criteriaRepository?: Pick<InvestmentCriteriaRepository, "getDefaults">,
+) {
   return async (input: PropertySearchInput) => {
     if (input.propertyType !== "homes" && input.propertyType !== "land") {
       return response(400, { status: "invalid", message: "Choose Homes or Land to start a search." });
@@ -24,6 +29,10 @@ export function createPropertySearchHandler(graph: GraphInvoker = listingRouting
       return response(422, { status: "unsupported", message: "Choose Oakhurst, CA or Mariposa, CA." });
     }
 
+    // Saved criteria are optional personalization; a missing/unavailable profile must never block listing search.
+    const investmentCriteria = criteriaRepository
+      ? await criteriaRepository.getDefaults().catch(() => DEFAULT_INVESTMENT_CRITERIA)
+      : undefined;
     const workflowState = initializeListingWorkflowState({
       workflowId: crypto.randomUUID(),
       searchRequest: {
@@ -35,6 +44,7 @@ export function createPropertySearchHandler(graph: GraphInvoker = listingRouting
         homeType: input.propertyType === "homes" ? "house" : undefined,
         filters: {},
       },
+      investmentCriteria,
     });
 
     const result = await graph.invoke({ workflowState });
@@ -71,6 +81,9 @@ function toPublicListing(listing: NormalizedListingRecord) {
     imageUrl: listing.imageUrl,
     propertyType: listing.propertyType,
     zoningText: listing.zoningText,
+    description: listing.description,
+    amenities: listing.amenities,
+    statusText: listing.statusText,
     url: listing.url,
   };
 }

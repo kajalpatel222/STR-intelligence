@@ -1,6 +1,9 @@
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { formatLandArea } from "./listing-format";
 import { InvestmentCriteriaPanel } from "./InvestmentCriteriaPanel";
+import type { PublicAttentionEvaluation } from "../shared/attention-api";
+import type { InvestmentCriteria } from "../shared/investment-criteria";
+import { evaluateCurrentListings } from "./attention-client";
 
 type PropertyIntent = "homes" | "land";
 const SUPPORTED_LOCATIONS = ["Oakhurst, CA", "Mariposa, CA"] as const;
@@ -29,6 +32,9 @@ type PublicListing = {
   imageUrl?: string;
   propertyType?: string;
   zoningText?: string;
+  description?: string;
+  amenities?: string[];
+  statusText?: string;
   url?: string;
 };
 
@@ -44,6 +50,8 @@ export default function App() {
   const [intentError, setIntentError] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [searchOutcome, setSearchOutcome] = useState<SearchOutcome | null>(null);
+  const [attentionEvaluations, setAttentionEvaluations] = useState<PublicAttentionEvaluation[]>([]);
+  const [isApplyingCriteria, setIsApplyingCriteria] = useState(false);
   const filteredLocations = SUPPORTED_LOCATIONS.filter((option) => option.toLowerCase().includes(location.toLowerCase()));
 
   function chooseLocation(option: SupportedLocation) {
@@ -76,6 +84,7 @@ export default function App() {
     if (submittedIntent && submittedIntent !== intent) {
       setSearchRequest(null);
       setSearchOutcome(null);
+      setAttentionEvaluations([]);
     }
   }
 
@@ -110,6 +119,7 @@ export default function App() {
     };
     setSearchRequest(request);
     setSearchOutcome(null);
+    setAttentionEvaluations([]);
     setIsSearching(true);
 
     try {
@@ -124,6 +134,17 @@ export default function App() {
       setSearchOutcome({ status: "unavailable", message: "Property search is temporarily unavailable. Please try again later." });
     } finally {
       setIsSearching(false);
+    }
+  }
+
+  async function applyCriteria(criteria: InvestmentCriteria) {
+    const listings = searchOutcome?.listings ?? [];
+    if (!listings.length) return;
+    setIsApplyingCriteria(true);
+    try {
+      setAttentionEvaluations(await evaluateCurrentListings(criteria, listings));
+    } finally {
+      setIsApplyingCriteria(false);
     }
   }
 
@@ -202,13 +223,15 @@ export default function App() {
               <span className="assistant-avatar" aria-hidden="true">SI</span>
               <div>
                 <strong>{searchOutcome.message}</strong>
-                {searchRequest?.source === "zillow_existing_home" && Boolean(searchOutcome.listings?.length) && <InvestmentCriteriaPanel />}
-                {searchOutcome.listings?.map((listing, index) => (
+                {searchRequest?.source === "zillow_existing_home" && Boolean(searchOutcome.listings?.length) && <InvestmentCriteriaPanel onApply={applyCriteria} isApplying={isApplyingCriteria} />}
+                {searchOutcome.listings?.map((listing, index) => {
+                  const evaluation = attentionEvaluations.find((item) => item.listingIndex === index);
+                  return (
                   <article className="listing-result" key={`${listing.url ?? listing.address ?? "listing"}-${index}`}>
                     <div className="listing-result__layout">
                       {listing.imageUrl ? <img className="listing-result__image" src={listing.imageUrl} alt={`Property at ${listing.address ?? listing.title ?? "this listing"}`} loading="lazy" /> : <div className="listing-result__image listing-result__image--fallback" role="img" aria-label="Property image unavailable">⌂</div>}
                       <div className="listing-result__content">
-                        <div className="listing-result__header"><div><h3>{listing.title ?? listing.address ?? (searchRequest?.source === "zillow_land" ? "Land for sale" : "Home for sale")}</h3><p>{[listing.city, listing.state, listing.postalCode].filter(Boolean).join(", ")}</p></div>{listing.price !== undefined && <strong className="listing-result__price">{formatPrice(listing.price)}</strong>}</div>
+                        <div className="listing-result__header"><div><h3>{listing.title ?? listing.address ?? (searchRequest?.source === "zillow_land" ? "Land for sale" : "Home for sale")}</h3><p>{[listing.city, listing.state, listing.postalCode].filter(Boolean).join(", ")}</p></div><div className="listing-result__price-stack">{listing.price !== undefined && <strong className="listing-result__price">{formatPrice(listing.price)}</strong>}{evaluation && <div className="listing-result__scores" aria-label="Property evaluation scores"><span className="score-tag"><strong>{formatScore(evaluation.result.attentionScore)}</strong><small>Attention Score</small></span><span className="score-tag score-tag--confidence"><strong>{formatScore(evaluation.result.confidenceScore)}</strong><small>Confidence Score</small></span></div>}</div></div>
                     {(listing.propertyType || listing.zoningText) && <p className="listing-result__descriptor">{[listing.propertyType, listing.zoningText].filter(Boolean).join(" · ")}</p>}
                     <dl>
                       {searchRequest?.source !== "zillow_land" && listing.beds !== undefined && <div><dt>Beds</dt><dd>{listing.beds}</dd></div>}
@@ -218,11 +241,12 @@ export default function App() {
                         formatLandArea(listing) && <div><dt>Parcel size</dt><dd>{formatLandArea(listing)}</dd></div>
                       ) : listing.lotSqft !== undefined && listing.lotSqft > 0 && <div><dt>Lot area</dt><dd>{formatLotArea(listing.lotSqft)}</dd></div>}
                     </dl>
+                    {evaluation && <div className="listing-result__reasons">{evaluation.explanation.positiveDrivers[0] && <p>{evaluation.explanation.positiveDrivers[0]}</p>}{(evaluation.explanation.concerns[0] ?? evaluation.explanation.missingEvidence[0]) && <p>{evaluation.explanation.concerns[0] ?? evaluation.explanation.missingEvidence[0]}</p>}</div>}
                     {listing.url && <a href={listing.url} target="_blank" rel="noreferrer">View listing <span aria-hidden="true">↗</span></a>}
                       </div>
                     </div>
                   </article>
-                ))}
+                )})}
               </div>
             </div>
           ) : (
@@ -255,4 +279,8 @@ function formatPrice(price: number) {
 
 function formatLotArea(lotSqft: number) {
   return lotSqft >= 43_560 ? `${(lotSqft / 43_560).toFixed(2)} acres` : `${lotSqft.toLocaleString()} sq ft`;
+}
+
+function formatScore(score: number | null) {
+  return score === null ? "—" : Math.round(score).toString();
 }

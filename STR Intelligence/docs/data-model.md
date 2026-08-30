@@ -98,6 +98,16 @@ Immutable observations of a source listing.
 - `amenities`
 - `raw_payload`
 
+### `investment_criteria_profiles`
+
+Stores the reusable Attention Screen defaults managed through the Node API.
+
+- `profile_key` is constrained to the single `default` profile while the app has no authentication.
+- Purchase budget minimum/maximum and improvement reserve are stored in USD.
+- `mode` is `strict` or `flexible`.
+- RLS is enabled with no browser policy; only the server service role may access this table.
+- A later authentication phase can replace the singleton key with user ownership without changing the public criteria contract.
+
 ### `str_analysis_runs`
 
 Stores the structured financial analysis for a property or listing snapshot.

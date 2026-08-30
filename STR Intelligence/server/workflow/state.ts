@@ -4,6 +4,10 @@ import type {
   SourceRunStatus,
 } from "../sources/listing-source.js";
 import type { NormalizedListingRecord } from "../ingest/types.js";
+import {
+  createInvestmentCriteriaSnapshot,
+  type InvestmentCriteria,
+} from "../../shared/investment-criteria.js";
 
 export type WorkflowSearchFilters = Readonly<Record<string, unknown>>;
 
@@ -62,6 +66,7 @@ export type ListingWorkflowState = {
   workflowId: string;
   status: WorkflowStatus;
   searchRequest: WorkflowSearchRequest;
+  investmentCriteria?: InvestmentCriteria;
   sourceRunStatus: SourceRunStatus;
   brightData: {
     externalJobId?: string;
@@ -84,6 +89,7 @@ export type ListingWorkflowState = {
 export function initializeListingWorkflowState(params: {
   workflowId: string;
   searchRequest: WorkflowSearchRequest;
+  investmentCriteria?: InvestmentCriteria;
   now?: string;
 }): ListingWorkflowState {
   const now = params.now ?? new Date().toISOString();
@@ -95,6 +101,9 @@ export function initializeListingWorkflowState(params: {
       ...params.searchRequest,
       filters: { ...params.searchRequest.filters },
     },
+    investmentCriteria: params.investmentCriteria
+      ? createInvestmentCriteriaSnapshot(params.investmentCriteria)
+      : undefined,
     sourceRunStatus: "pending",
     brightData: {},
     rawProviderRecords: [],

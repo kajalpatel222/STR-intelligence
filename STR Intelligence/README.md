@@ -56,6 +56,9 @@ Vite proxies `/api` to the Node API at `http://127.0.0.1:8787`.
 - Maximum provider records per request: 5.
 - **Homes:** accepts existing-home Zillow records and displays home and lot details when available.
 - **Land:** accepts parcel-only Zillow records and displays price, location, image, source descriptors, and parcel acreage/area when available.
+- **Investment criteria defaults:** Home results load and save a server-managed default budget, improvement reserve, and Strict/Flexible preference. The profile is intentionally a singleton until authentication introduces per-user ownership.
+- Criteria are captured in workflow state and can be applied to the current Home results without rerunning the property search. They still do not change ingestion or routing.
+- Each evaluated Home card shows a deterministic Attention Score, a separate evidence-based Confidence Score, and concise reasons. Land remains outside the Attention Screen.
 - Provider payloads, credentials, workflow identifiers, and database identifiers never enter the public response DTO.
 
 ## Verification
@@ -76,6 +79,6 @@ Automated tests use fixtures and injected repositories; they do not consume Apif
 
 - **Phases 1-2 complete:** application foundation, schema, provider ingestion, normalization, validation, deduplication, and immutable snapshots.
 - **Phase 3 complete:** shared workflow state, deterministic routing, LangGraph Home/Land execution, live Node API, and React integration.
-- **Phase 4 - Attention Screen:** 4.1 criteria UI; 4.2 criteria contract/default profile and backend propagation; 4.3 transparent deterministic evaluator; 4.4 stored-listing batch evaluation; 4.5 Review now/Promising/Low priority/Ineligible bands; 4.6 presentation, manual override, and comparator handoff; 4.7 end-to-end verification and persistence refinements.
+- **Phase 4 - Attention Screen:** 4.1 criteria UI complete; 4.2 validated contract, saved default profile, and workflow propagation complete; 4.3 transparent deterministic Attention and Confidence evaluation complete; 4.4 stored-listing batch evaluation; 4.5 Review now/Promising/Low priority/Ineligible bands; 4.6 presentation, manual override, and comparator handoff; 4.7 end-to-end verification and persistence refinements.
 - **Phase 5 - STR Comparator:** Airbnb-backed comparable analysis for promoted Home listings.
 - **Later:** weekly automation and operational scheduling.

@@ -17,5 +17,5 @@
     "tsBuildInfoFile": "/private/tmp/str-intelligence-week-3.tsbuildinfo",
     "jsx": "react-jsx"
   },
-  "include": ["src"]
+  "include": ["src", "shared/**/*.ts"]
 }
