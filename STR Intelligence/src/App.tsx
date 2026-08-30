@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { formatLandArea } from "./listing-format";
 import { InvestmentCriteriaPanel } from "./InvestmentCriteriaPanel";
 import type { PublicAttentionEvaluation } from "../shared/attention-api";
@@ -6,6 +6,9 @@ import type { InvestmentCriteria } from "../shared/investment-criteria";
 import { evaluateCurrentListings } from "./attention-client";
 import { ListingReviewControls, type ListingReviewDecision } from "./ListingReviewControls";
 import { loadListingReviews, saveListingReview } from "./listing-review-client";
+import { StrComparatorWorkspace } from "./StrComparatorWorkspace";
+import { StrComparatorPreview } from "./StrComparatorPreview";
+import { strComparatorClient, type StrComparisonDto } from "./str-comparator-client";
 
 type PropertyIntent = "homes" | "land";
 const SUPPORTED_LOCATIONS = ["Oakhurst, CA", "Mariposa, CA"] as const;
@@ -56,8 +59,26 @@ export default function App() {
   const [isApplyingCriteria, setIsApplyingCriteria] = useState(false);
   const [listingReviews, setListingReviews] = useState<Record<number, ListingReviewDecision>>({});
   const [reviewSaveStates, setReviewSaveStates] = useState<Record<number, "saving" | "saved" | "error">>({});
+  const [comparatorListingIndex, setComparatorListingIndex] = useState<number | null>(null);
+  const [comparisons, setComparisons] = useState<Record<number, StrComparisonDto>>({});
+  const [comparisonLoadingIndex, setComparisonLoadingIndex] = useState<number | null>(null);
+  const [comparisonErrors, setComparisonErrors] = useState<Record<number, string>>({});
+  const returnFocusIndex = useRef<number | null>(null);
   const filteredLocations = SUPPORTED_LOCATIONS.filter((option) => option.toLowerCase().includes(location.toLowerCase()));
   const orderedListingIndexes = rankListingIndexes(searchOutcome?.listings?.length ?? 0, attentionEvaluations);
+
+  useEffect(() => {
+    if (comparatorListingIndex === null && returnFocusIndex.current !== null) {
+      const index = returnFocusIndex.current;
+      document.getElementById(comparisons[index] ? `comparison-details-${index}` : `compare-str-${index}`)?.focus();
+      returnFocusIndex.current = null;
+    }
+  }, [comparatorListingIndex, comparisons]);
+
+  if (comparatorListingIndex !== null) {
+    const listing = searchOutcome?.listings?.[comparatorListingIndex];
+    if (listing?.url) return <StrComparatorWorkspace listingUrl={listing.url} propertyLabel={listing.address ?? listing.title} initialComparison={comparisons[comparatorListingIndex]} onBack={() => setComparatorListingIndex(null)} />;
+  }
 
   function chooseLocation(option: SupportedLocation) {
     setLocation(option);
@@ -92,6 +113,9 @@ export default function App() {
       setAttentionEvaluations([]);
       setListingReviews({});
       setReviewSaveStates({});
+      setComparatorListingIndex(null);
+      setComparisons({});
+      setComparisonErrors({});
     }
   }
 
@@ -129,6 +153,9 @@ export default function App() {
     setAttentionEvaluations([]);
     setListingReviews({});
     setReviewSaveStates({});
+    setComparatorListingIndex(null);
+    setComparisons({});
+    setComparisonErrors({});
     setIsSearching(true);
 
     try {
@@ -149,6 +176,7 @@ export default function App() {
             if (saved) decisions[index] = saved.decision;
           });
           setListingReviews(decisions);
+          setReviewSaveStates(Object.fromEntries(Object.keys(decisions).map((index) => [Number(index), "saved"])));
         } catch {
           setReviewSaveStates({});
         }
@@ -188,6 +216,21 @@ export default function App() {
         return next;
       });
       setReviewSaveStates((states) => ({ ...states, [index]: "error" }));
+    }
+  }
+
+  async function findComparables(index: number) {
+    const listing = searchOutcome?.listings?.[index];
+    if (!listing?.url || comparisonLoadingIndex !== null) return;
+    setComparisonLoadingIndex(index);
+    setComparisonErrors((errors) => ({ ...errors, [index]: "" }));
+    try {
+      const comparison = await strComparatorClient.discover(listing.url);
+      setComparisons((current) => ({ ...current, [index]: comparison }));
+    } catch {
+      setComparisonErrors((errors) => ({ ...errors, [index]: "We could not find nearby stays. Please try again." }));
+    } finally {
+      setComparisonLoadingIndex(null);
     }
   }
 
@@ -277,7 +320,7 @@ export default function App() {
                     <div className="listing-result__layout">
                       {listing.imageUrl ? <img className="listing-result__image" src={listing.imageUrl} alt={`Property at ${listing.address ?? listing.title ?? "this listing"}`} loading="lazy" /> : <div className="listing-result__image listing-result__image--fallback" role="img" aria-label="Property image unavailable">⌂</div>}
                       <div className="listing-result__content">
-                        <div className="listing-result__header"><div><h3>{listing.title ?? listing.address ?? (searchRequest?.source === "zillow_land" ? "Land for sale" : "Home for sale")}</h3><p>{[listing.city, listing.state, listing.postalCode].filter(Boolean).join(", ")}</p>{evaluation && <span className={`priority-badge priority-badge--${evaluation.priority.band}`}>{formatPriorityBand(evaluation.priority.band)}</span>}</div><div className="listing-result__price-stack">{listing.price !== undefined && <strong className="listing-result__price">{formatPrice(listing.price)}</strong>}{evaluation && <div className="listing-result__scores" aria-label="Property evaluation scores"><span className="score-tag"><strong>{formatScore(evaluation.result.attentionScore)}</strong><small>Attention Score</small></span><span className="score-tag score-tag--confidence"><strong>{formatScore(evaluation.result.confidenceScore)}</strong><small>Confidence Score</small></span></div>}</div></div>
+                        <div className="listing-result__header"><div><h3>{listing.title ?? listing.address ?? (searchRequest?.source === "zillow_land" ? "Land for sale" : "Home for sale")}</h3><p>{[listing.city, listing.state, listing.postalCode].filter(Boolean).join(", ")}</p>{evaluation && <span className={`priority-badge priority-badge--${evaluation.priority.band}`}>{formatPriorityBand(evaluation.priority.band)}</span>}</div><div className="listing-result__price-stack"><div className="listing-result__price-row">{listing.price !== undefined && <strong className="listing-result__price">{formatPrice(listing.price)}</strong>}{listing.url && <SourceListingLink url={listing.url} propertyLabel={propertyLabel} />}</div>{evaluation && <div className="listing-result__scores" aria-label="Property evaluation scores"><span className="score-tag"><strong>{formatScore(evaluation.result.attentionScore)}</strong><small>Attention Score</small></span><span className="score-tag score-tag--confidence"><strong>{formatScore(evaluation.result.confidenceScore)}</strong><small>Confidence Score</small></span></div>}</div></div>
                     {(listing.propertyType || listing.zoningText) && <p className="listing-result__descriptor">{[listing.propertyType, listing.zoningText].filter(Boolean).join(" · ")}</p>}
                     <dl>
                       {searchRequest?.source !== "zillow_land" && listing.beds !== undefined && <div><dt>Beds</dt><dd>{listing.beds}</dd></div>}
@@ -288,8 +331,10 @@ export default function App() {
                       ) : listing.lotSqft !== undefined && listing.lotSqft > 0 && <div><dt>Lot area</dt><dd>{formatLotArea(listing.lotSqft)}</dd></div>}
                     </dl>
                     {evaluation && <details className="listing-insights"><summary>Why this ranking</summary><div><p>{evaluation.priority.reason}</p>{evaluation.explanation.positiveDrivers.slice(0, 2).map((reason) => <p key={reason}>{reason}</p>)}{evaluation.explanation.concerns.slice(0, 2).map((reason) => <p key={reason} className="is-concern">{reason}</p>)}{evaluation.explanation.missingEvidence.slice(0, 2).map((reason) => <p key={reason} className="is-missing">{reason}</p>)}</div></details>}
-                    {evaluation && <ListingReviewControls propertyLabel={propertyLabel} groupName={`review-${index}`} decision={review} isSaving={reviewSaveStates[index] === "saving"} feedback={reviewSaveStates[index] === "saving" ? "Saving…" : reviewSaveStates[index] === "saved" ? "Saved" : reviewSaveStates[index] === "error" ? "Decision could not be saved. Try again." : undefined} onDecision={(decision) => void updateListingReview(index, decision)} />}
-                    {listing.url && <a href={listing.url} target="_blank" rel="noreferrer">View listing <span aria-hidden="true">↗</span></a>}
+                    {evaluation && <ListingReviewControls propertyLabel={propertyLabel} groupName={`review-${index}`} decision={review} isSaving={reviewSaveStates[index] === "saving"} feedback={reviewSaveStates[index] === "saving" ? "Saving…" : reviewSaveStates[index] === "error" ? "Decision could not be saved. Try again." : undefined} onDecision={(decision) => void updateListingReview(index, decision)} />}
+                    {evaluation && canOpenStrComparator(review, reviewSaveStates[index]) && !comparisons[index] && <button id={`compare-str-${index}`} className="compare-str-button" type="button" disabled={comparisonLoadingIndex !== null} onClick={() => void findComparables(index)}>{comparisonLoadingIndex === index ? "Finding nearby STRs…" : "Compare with nearby STRs"} <span aria-hidden="true">→</span></button>}
+                    {comparisonErrors[index] && <p className="comparison-inline-error" role="alert">{comparisonErrors[index]}</p>}
+                    {comparisons[index] && <StrComparatorPreview comparison={comparisons[index]} propertyLabel={propertyLabel} detailsButtonId={`comparison-details-${index}`} onSeeDetails={() => { returnFocusIndex.current = index; setComparatorListingIndex(index); }} />}
                       </div>
                     </div>
                   </article>
@@ -311,6 +356,12 @@ export default function App() {
       </footer>
     </main>
   );
+}
+
+function SourceListingLink({ url, propertyLabel }: Readonly<{ url: string; propertyLabel: string }>) {
+  return <a className="listing-result__source-link" href={url} target="_blank" rel="noreferrer" aria-label={`Open Zillow listing for ${propertyLabel}`}>
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1"/></svg>
+  </a>;
 }
 
 function inferPropertyIntent(message: string): PropertyIntent | null {
@@ -352,4 +403,8 @@ export function rankListingIndexes(listingCount: number, evaluations: readonly P
 
 function scoreForSort(score: number | null | undefined) {
   return typeof score === "number" && Number.isFinite(score) ? score : -1;
+}
+
+export function canOpenStrComparator(decision: ListingReviewDecision | undefined, saveState: "saving" | "saved" | "error" | undefined) {
+  return decision === "promote" && saveState === "saved";
 }

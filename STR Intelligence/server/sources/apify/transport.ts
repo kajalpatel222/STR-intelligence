@@ -135,8 +135,8 @@ export function mapApifyZillowRecord(
     lotSqft: lotSquareFeet(record),
     lotAcres: lotAcres(record),
     imageUrl: primaryImage(record),
-    latitude: number(record.latitude),
-    longitude: number(record.longitude),
+    latitude: coordinate(record, "latitude"),
+    longitude: coordinate(record, "longitude"),
     propertyType,
     zoningText: text(record.zoningText ?? record.zoning ?? record.zoningDescription),
     statusText: text(record.homeStatus ?? record.statusText),
@@ -145,7 +145,20 @@ export function mapApifyZillowRecord(
 }
 
 function text(value: unknown) { return typeof value === "string" || typeof value === "number" ? String(value) : undefined; }
-function number(value: unknown) { const parsed = typeof value === "number" ? value : Number(String(value ?? "").replace(/[^0-9.-]/g, "")); return Number.isFinite(parsed) ? parsed : undefined; }
+function number(value: unknown) {
+  if (value === null || value === undefined) return undefined;
+  const cleaned = typeof value === "number" ? value : String(value).replace(/[^0-9.-]/g, "");
+  if (cleaned === "") return undefined;
+  const parsed = typeof cleaned === "number" ? cleaned : Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+function coordinate(record: Record<string, unknown>, axis: "latitude" | "longitude") {
+  const latLong = object(record.latLong);
+  const coordinates = object(record.coordinates);
+  const homeInfo = object(object(record.hdpData).homeInfo);
+  return number(record[axis] ?? latLong[axis] ?? coordinates[axis] ?? homeInfo[axis]);
+}
+function object(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function primaryImage(record: Record<string, unknown>) {
   const direct = text(record.imgSrc ?? record.imageUrl);
   if (direct) return direct;

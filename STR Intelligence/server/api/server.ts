@@ -7,6 +7,12 @@ import { createInvestmentCriteriaHandler } from "./investment-criteria.js";
 import { handleAttentionEvaluation } from "./attention-evaluation.js";
 import { createListingReviewsHandler } from "./listing-reviews.js";
 import { ListingReviewRepository } from "../reviews/repository.js";
+import { ApifyClient } from "apify-client";
+import { getServerEnvironment } from "../config/env.js";
+import { ApifyAirbnbProvider } from "../sources/str-comparator/apify-provider.js";
+import { StrComparisonRepository } from "../str-comparator/repository.js";
+import { createStrComparatorGraph } from "../workflow/str-comparator-graph.js";
+import { createStrComparisonsHandler } from "./str-comparisons.js";
 
 const liveDependencies = {
   // These boundaries are emitted server-side for verification and never enter
@@ -18,6 +24,15 @@ const criteriaRepository = new CriteriaDefaultsRepository();
 const handlePropertySearch = createPropertySearchHandler(liveGraph, criteriaRepository);
 const handleInvestmentCriteria = createInvestmentCriteriaHandler(criteriaRepository);
 const handleListingReviews = createListingReviewsHandler(new ListingReviewRepository());
+const environment = getServerEnvironment();
+const comparisonRepository = new StrComparisonRepository();
+const comparisonProvider = new ApifyAirbnbProvider({
+  client: new ApifyClient({ token: environment.apifyApiToken }),
+  discoveryActorId: environment.apifyAirbnbDiscoveryActorId,
+  calendarActorId: environment.apifyAirbnbCalendarActorId,
+  timeoutMs: 300_000,
+});
+const handleStrComparisons = createStrComparisonsHandler(createStrComparatorGraph({ provider: comparisonProvider, repository: comparisonRepository }), comparisonRepository);
 const port = 8787;
 
 // Secrets are read only by server-side graph dependencies; this HTTP boundary
@@ -29,14 +44,30 @@ const server = createServer(async (request, response) => {
   const isAttentionEvaluation = request.method === "POST" && request.url === "/api/attention-evaluation";
   const isReviewsQuery = request.method === "POST" && request.url === "/api/listing-reviews/query";
   const isReviewPut = request.method === "PUT" && request.url === "/api/listing-reviews";
-  if (!isPropertySearch && !isCriteriaGet && !isCriteriaPut && !isAttentionEvaluation && !isReviewsQuery && !isReviewPut) {
+  const comparisonMatch = request.url?.match(/^\/api\/str-comparisons\/([0-9a-f-]+)(?:\/(selections|evidence|refresh))?$/i);
+  const isComparisonCreate = request.method === "POST" && request.url === "/api/str-comparisons";
+  const isComparisonGet = request.method === "GET" && Boolean(comparisonMatch) && !comparisonMatch?.[2];
+  const isComparisonSelect = request.method === "PUT" && comparisonMatch?.[2] === "selections";
+  const isComparisonEvidence = request.method === "POST" && comparisonMatch?.[2] === "evidence";
+  const isComparisonRefresh = request.method === "POST" && comparisonMatch?.[2] === "refresh";
+  if (!isPropertySearch && !isCriteriaGet && !isCriteriaPut && !isAttentionEvaluation && !isReviewsQuery && !isReviewPut && !isComparisonCreate && !isComparisonGet && !isComparisonSelect && !isComparisonEvidence && !isComparisonRefresh) {
     sendJson(response, 404, { status: "not_found", message: "Not found." });
     return;
   }
 
   try {
     const endpointStartedAt = performance.now();
-    const result = isCriteriaGet
+    const result = isComparisonCreate
+      ? await handleStrComparisons.create(await readJson(request))
+      : isComparisonGet
+        ? await handleStrComparisons.get(comparisonMatch![1]!)
+        : isComparisonSelect
+          ? await handleStrComparisons.select(comparisonMatch![1]!, await readJson(request))
+          : isComparisonEvidence
+            ? await handleStrComparisons.enrich(comparisonMatch![1]!, await readJson(request))
+            : isComparisonRefresh
+              ? await handleStrComparisons.create({ ...(await readJson(request)), listingUrl: (await comparisonRepository.loadComparison(comparisonMatch![1]!))?.target.listingUrl }, true)
+    : isCriteriaGet
       ? await handleInvestmentCriteria.get()
       : isCriteriaPut
         ? await handleInvestmentCriteria.put(await readJson(request))

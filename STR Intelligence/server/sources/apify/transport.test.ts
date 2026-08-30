@@ -72,6 +72,31 @@ test("contains malformed dataset items as provider errors", () => {
   assert.equal(result.kind, "provider_error");
 });
 
+test("does not turn missing Zillow coordinates into the Gulf of Guinea", () => {
+  const result = mapApifyZillowRecord({
+    zpid: "missing-coordinates",
+    detailUrl: "https://www.zillow.com/homedetails/missing-coordinates_zpid/",
+    latitude: null,
+    longitude: "",
+  });
+  assert.equal(result.kind, "listing");
+  if (result.kind !== "listing") return;
+  assert.equal(result.latitude, undefined);
+  assert.equal(result.longitude, undefined);
+});
+
+test("maps coordinates from the observed nested Zillow payload shapes", () => {
+  const result = mapApifyZillowRecord({
+    zpid: "nested-coordinates",
+    detailUrl: "https://www.zillow.com/homedetails/nested-coordinates_zpid/",
+    hdpData: { homeInfo: { latitude: 37.326977, longitude: -119.63836 } },
+  });
+  assert.equal(result.kind, "listing");
+  if (result.kind !== "listing") return;
+  assert.equal(result.latitude, 37.326977);
+  assert.equal(result.longitude, -119.63836);
+});
+
 test("maps parcel fields under the distinct land source", () => {
   const result = mapApifyZillowRecord({
     zpid: "land-123",

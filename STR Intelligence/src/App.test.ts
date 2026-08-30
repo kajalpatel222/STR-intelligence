@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { formatLandArea } from "./listing-format.js";
 import { DEFAULT_INVESTMENT_CRITERIA, formatCriteriaCurrency } from "../shared/investment-criteria.js";
 import { InvestmentCriteriaPanel } from "./InvestmentCriteriaPanel.js";
-import { rankListingIndexes } from "./App.js";
+import { canOpenStrComparator, rankListingIndexes } from "./App.js";
 import type { PublicAttentionEvaluation } from "../shared/attention-api.js";
 import { ListingReviewControls } from "./ListingReviewControls.js";
 
@@ -82,4 +82,11 @@ test("renders accessible native radio review choices without note controls", () 
   const savingMarkup = renderToStaticMarkup(createElement(ListingReviewControls, { ...baseProps, decision: "promote", isSaving: true, feedback: "Saving…" }));
   assert.equal((savingMarkup.match(/disabled=""/g) ?? []).length, 3);
   assert.match(savingMarkup, /role="status">Saving/);
+});
+
+test("unlocks the comparator only after a Promote decision is safely persisted", () => {
+  assert.equal(canOpenStrComparator("promote", "saved"), true);
+  assert.equal(canOpenStrComparator("promote", "saving"), false);
+  assert.equal(canOpenStrComparator("hold", "saved"), false);
+  assert.equal(canOpenStrComparator(undefined, undefined), false);
 });
