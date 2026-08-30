@@ -6,7 +6,7 @@ STR Intelligence is a short-term-rental investment research application that col
 
 - **React + Vite + TypeScript** provides the end-user conversational search and listing cards.
 - **Node.js** validates browser requests and keeps provider and database credentials server-side.
-- **LangGraph** routes shared workflow state to deterministic Home or Land ingestion nodes.
+- **LangGraph + LangChain tools** route deterministic ingestion and retrieval-first STR comparison workflows without an LLM.
 - **Apify** runs the configured Zillow Search Actor with source-specific filters and a five-record maximum.
 - **Supabase/PostgreSQL** stores markets, source runs, canonical homes/parcels, source mappings, and immutable listing snapshots.
 
@@ -64,7 +64,9 @@ Vite proxies `/api` to the Node API at `http://127.0.0.1:8787`.
 - Evaluated Homes receive a transparent priority band: Review now, Promising, Low priority, or Ineligible. Review now requires Attention 75+ and Confidence 65+; strict-limit violations and unscorable listings are Ineligible.
 - After criteria are applied, current Home results are ordered by highest Attention Score, then Confidence Score; unevaluated Home and Land searches retain provider order.
 - Evaluated Home cards support persisted Promote, Hold, or Dismiss radio decisions. Detailed scoring evidence stays behind a compact disclosure, and a saved Promote decision unlocks STR comparison.
-- A saved **Promote** decision unlocks a dedicated STR Comparator workspace. Discovery explicitly collects up to 15 Airbnb candidates, deterministically ranks the five strongest entire-home matches, and caches the result for seven days.
+- A saved **Promote** decision unlocks a dedicated STR Comparator workspace. A [documented retrieval-first agentic pattern](docs/comparator-agentic-pattern.md) checks Supabase first, returns a fresh comparison without an Actor call, or collects and ranks the five strongest entire-home matches when evidence is missing or stale.
+- Comparator evidence remains fresh for seven days. If refresh collection fails, the graph returns the latest stored comparison when one exists instead of discarding useful evidence.
+- The read-only **STR Library** aggregates unique saved Airbnb comparables across Zillow properties and sorts them by recent observation, rating, closest recorded distance, or highest booked-or-blocked signal without calling Apify.
 - Comparable cards show the current observed nightly rate and a concise **Booked or blocked** percentage based on the actual number of calendar nights observed for that listing. This signal is not presented as occupancy.
 - Detailed ADR, selection controls, evidence summaries, and calendar actions are deferred to a broader stored-data analysis workspace.
 - Comparator runs, candidate evidence, dated rates, and calendar snapshots are stored server-side. Provider keys, raw payloads, database IDs, and Actor metadata do not cross the browser boundary.

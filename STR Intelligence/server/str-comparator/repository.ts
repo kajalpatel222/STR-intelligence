@@ -63,9 +63,18 @@ export type PersistedEvidence = Readonly<{
   observedAt: string;
 }>;
 
+export type ComparisonCacheLookup =
+  | Readonly<{ status: "missing" }>
+  | Readonly<{
+      status: "fresh" | "stale";
+      publicReference: string;
+      completedAt?: string;
+      expiresAt: string;
+    }>;
+
 export interface StrComparisonRepositoryPort {
   resolveTarget(listingUrl: string): Promise<ComparatorTargetRecord | undefined>;
-  findFreshComparison(listingUrl: string): Promise<string | undefined>;
+  findComparisonCache(canonicalPropertyId: string, now?: Date): Promise<ComparisonCacheLookup>;
   createRun(params: { target: ComparatorTargetRecord; publicReference: string; cacheKey: string; request: unknown }): Promise<string>;
   resolveRunId(publicReference: string): Promise<string>;
   saveDiscovery(runId: string, candidates: readonly PersistedComparable[], summary: unknown): Promise<void>;
@@ -73,6 +82,14 @@ export interface StrComparisonRepositoryPort {
   updateSelections(publicReference: string, listingUrls: readonly string[]): Promise<void>;
   loadComparison(publicReference: string): Promise<StoredComparison | undefined>;
 }
+
+export type StoredComparableLibraryItem = Readonly<{
+  comparable: StoredComparison["candidates"][number];
+  associatedPropertyCount: number;
+  associatedProperties: readonly string[];
+  firstObservedAt: string;
+  latestObservedAt: string;
+}>;
 
 export type StoredComparison = Readonly<{
   publicReference: string;
@@ -124,14 +141,21 @@ export class StrComparisonRepository implements StrComparisonRepositoryPort {
     });
   }
 
-  async findFreshComparison(listingUrl: string): Promise<string | undefined> {
-    const target = await this.resolveTarget(listingUrl);
-    if (!target) return undefined;
-    const { data, error } = await this.client.from("str_comparison_runs").select("public_reference")
-      .eq("canonical_property_id", target.canonicalPropertyId).in("status", ["discovered", "enriched", "partial"])
-      .gt("expires_at", new Date().toISOString()).order("completed_at", { ascending: false }).limit(1).maybeSingle();
+  async findComparisonCache(canonicalPropertyId: string, now = new Date()): Promise<ComparisonCacheLookup> {
+    const { data, error } = await this.client.from("str_comparison_runs").select("public_reference,completed_at,expires_at")
+      .eq("canonical_property_id", canonicalPropertyId).in("status", ["discovered", "enriched", "partial"])
+      .order("completed_at", { ascending: false }).limit(1).maybeSingle();
     if (error) throw new Error("Unable to load saved comparison evidence.");
-    return data ? String(data.public_reference) : undefined;
+    if (!data) return Object.freeze({ status: "missing" });
+
+    const expiresAt = optionalText(data.expires_at);
+    if (!expiresAt) return Object.freeze({ status: "missing" });
+    return Object.freeze({
+      status: Date.parse(expiresAt) > now.getTime() ? "fresh" : "stale",
+      publicReference: String(data.public_reference),
+      completedAt: optionalText(data.completed_at),
+      expiresAt,
+    });
   }
 
   async createRun(params: { target: ComparatorTargetRecord; publicReference: string; cacheKey: string; request: unknown }): Promise<string> {
@@ -229,6 +253,44 @@ export class StrComparisonRepository implements StrComparisonRepositoryPort {
     }));
     return Object.freeze({ publicReference: String(run.public_reference), status: String(run.status), stage: String(run.stage), completedAt: optionalText(run.completed_at), target, summary: run.summary, candidates: Object.freeze(candidates) });
   }
+
+  async listComparableLibrary(limit = 200): Promise<readonly StoredComparableLibraryItem[]> {
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 500);
+    const { data, error } = await this.client.from("str_comparison_candidates")
+      .select("*,comparison_run:str_comparison_runs!str_comparison_candidates_comparison_run_id_fkey!inner(status,canonical_property_id,canonical_properties(address_line1,city,state)),str_rate_observations(nightly_rate_usd,observed_at),str_calendar_snapshots(available_nights,unavailable_nights,unknown_nights,unavailability_rate,observed_at)")
+      .in("comparison_run.status", ["discovered", "enriched", "partial"])
+      .order("observed_at", { ascending: false })
+      .limit(boundedLimit);
+    if (error) throw new Error("Unable to load the STR comparable library.");
+
+    const grouped = new Map<string, Record<string, any>[]>();
+    for (const row of data ?? []) {
+      const key = optionalText(row.provider_listing_key) ?? optionalText(row.listing_url);
+      if (!key) continue;
+      grouped.set(key, [...(grouped.get(key) ?? []), row]);
+    }
+
+    return Object.freeze([...grouped.values()].map((rows) => {
+      const latest = rows[0]!;
+      const comparable = rowToStoredComparable(latest);
+      const closestDistance = Math.min(...rows.map((row) => optionalNumber(row.distance_miles)).filter((value): value is number => value !== undefined && value >= 0));
+      const propertyLabels = new Map<string, string>();
+      for (const row of rows) {
+        const run = firstRecord(row.comparison_run);
+        const property = firstRecord(run.canonical_properties);
+        const propertyId = optionalText(run.canonical_property_id);
+        if (propertyId) propertyLabels.set(propertyId, [optionalText(property.address_line1), optionalText(property.city), optionalText(property.state)].filter(Boolean).join(", ") || "Associated Zillow property");
+      }
+      const observed = rows.map((row) => optionalText(row.observed_at)).filter((value): value is string => Boolean(value)).sort();
+      return Object.freeze({
+        comparable: Object.freeze({ ...comparable, distanceMiles: Number.isFinite(closestDistance) ? closestDistance : comparable.distanceMiles }),
+        associatedPropertyCount: propertyLabels.size,
+        associatedProperties: Object.freeze([...propertyLabels.values()]),
+        firstObservedAt: observed[0] ?? comparable.observedAt,
+        latestObservedAt: observed.at(-1) ?? comparable.observedAt,
+      });
+    }).sort((left, right) => right.latestObservedAt.localeCompare(left.latestObservedAt)));
+  }
 }
 
 export function rowToStoredComparable(row: Record<string, any>): StoredComparison["candidates"][number] {
@@ -244,6 +306,7 @@ export function rowToStoredComparable(row: Record<string, any>): StoredCompariso
   return Object.freeze({ providerListingKey: String(row.provider_listing_key), listingUrl: String(row.listing_url), title: optionalText(row.title), imageUrl: optionalText(row.image_url), latitude: Number(row.latitude), longitude: Number(row.longitude), distanceMiles: Number(row.distance_miles), propertyType: optionalText(row.property_type), roomType: optionalText(row.room_type), bedrooms: optionalNumber(row.bedrooms), bathrooms: optionalNumber(row.bathrooms), guestCapacity: optionalNumber(row.guest_capacity), rating: optionalNumber(row.rating), reviewCount: optionalNumber(row.review_count), isSuperhost: typeof row.is_superhost === "boolean" ? row.is_superhost : undefined, amenities: Object.freeze(Array.isArray(row.amenities) ? row.amenities.filter((item: unknown): item is string => typeof item === "string") : []), observedNightlyPriceUsd: Number(row.observed_nightly_price_usd), observedCheckIn: String(row.observed_check_in), observedCheckOut: String(row.observed_check_out), similarityScore: Number(row.similarity_score), matchReasons: Object.freeze(Array.isArray(row.match_reasons) ? row.match_reasons.filter((item: unknown): item is string => typeof item === "string") : []), observedAt: String(row.observed_at), rawPayload: row.raw_payload, included: row.str_comparable_selections?.[0]?.included !== false, estimatedAdrUsd: rates.length ? mean(rates) : undefined, rateMinimumUsd: rates.length ? Math.min(...rates) : undefined, rateMaximumUsd: rates.length ? Math.max(...rates) : undefined, rateObservationCount: rates.length, calendarUnavailablePercentage: optionalNumber(calendar?.unavailability_rate) !== undefined ? optionalNumber(calendar.unavailability_rate)! * 100 : undefined, calendarUnavailableNights: unavailableNights, calendarObservationCount });
 }
 function asRecord(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
+function firstRecord(value: unknown): Record<string, unknown> { return Array.isArray(value) ? asRecord(value[0]) : asRecord(value); }
 export function resolveTargetCoordinates(property: Record<string, unknown>, snapshot: Record<string, unknown>) {
   const providerRaw = asRecord(snapshot.raw);
   const latLong = asRecord(providerRaw.latLong);

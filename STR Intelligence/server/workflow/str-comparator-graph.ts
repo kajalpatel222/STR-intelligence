@@ -1,8 +1,9 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { calculateComparatorSummary, type ComparatorCandidate, type ComparatorSummary } from "../../shared/str-comparator.js";
 import { haversineDistanceKm, rankComparableCandidates } from "../../shared/str-comparator-ranking.js";
-import type { StrComparatorProvider, DiscoveredListing, ListingCalendar } from "../sources/str-comparator/provider.js";
-import type { ComparatorTargetRecord, PersistedComparable, PersistedEvidence, StrComparisonRepositoryPort } from "../str-comparator/repository.js";
+import type { StrComparatorProvider, DiscoveredListing, ListingCalendar, ProviderBatch } from "../sources/str-comparator/provider.js";
+import type { ComparatorTargetRecord, PersistedComparable, PersistedEvidence, StrComparisonRepositoryPort, ComparisonCacheLookup } from "../str-comparator/repository.js";
+import { createComparatorTools } from "../str-comparator/tools.js";
 
 export type StrComparatorIntent = "discover" | "enrich";
 export type StrComparatorWorkflowStatus = "initialized" | "not_promoted" | "collecting" | "persisting" | "completed" | "partial" | "failed";
@@ -11,6 +12,7 @@ export type StrComparatorWorkflowState = Readonly<{
   workflowId: string;
   intent: StrComparatorIntent;
   listingUrl: string;
+  bypassCache: boolean;
   comparisonReference?: string;
   selectedListingUrls: readonly string[];
   target?: ComparatorTargetRecord;
@@ -18,13 +20,20 @@ export type StrComparatorWorkflowState = Readonly<{
   candidates: readonly PersistedComparable[];
   summary?: ComparatorSummary;
   status: StrComparatorWorkflowStatus;
+  cacheStatus?: ComparisonCacheLookup["status"];
+  dataOrigin?: "fresh_cache" | "provider" | "saved_fallback";
   failureCode?: "not_promoted" | "unsupported_property" | "provider_unavailable" | "insufficient_candidates" | "persistence_failed";
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
 }>;
 
-const ComparatorGraphState = Annotation.Root({ workflowState: Annotation<StrComparatorWorkflowState>() });
+const ComparatorGraphState = Annotation.Root({
+  workflowState: Annotation<StrComparatorWorkflowState>(),
+  cacheLookup: Annotation<ComparisonCacheLookup | undefined>(),
+  providerBatch: Annotation<ProviderBatch<DiscoveredListing> | undefined>(),
+  providerFailed: Annotation<boolean | undefined>(),
+});
 
 export function initializeStrComparatorWorkflowState(params: {
   workflowId: string;
@@ -32,34 +41,82 @@ export function initializeStrComparatorWorkflowState(params: {
   listingUrl: string;
   comparisonReference?: string;
   selectedListingUrls?: readonly string[];
+  bypassCache?: boolean;
   now?: string;
 }): StrComparatorWorkflowState {
   const now = params.now ?? new Date().toISOString();
-  return Object.freeze({ workflowId: params.workflowId, intent: params.intent, listingUrl: params.listingUrl,
+  return Object.freeze({ workflowId: params.workflowId, intent: params.intent, listingUrl: params.listingUrl, bypassCache: params.bypassCache ?? false,
     comparisonReference: params.comparisonReference, selectedListingUrls: Object.freeze([...(params.selectedListingUrls ?? [])]),
     candidates: Object.freeze([]), status: "initialized", createdAt: now, updatedAt: now });
 }
 
 export function createStrComparatorGraph(dependencies: { provider: StrComparatorProvider; repository: StrComparisonRepositoryPort }) {
-  const execute = async ({ workflowState }: typeof ComparatorGraphState.State) => ({
-    workflowState: workflowState.intent === "discover"
-      ? await discoverComparables(workflowState, dependencies)
-      : await enrichComparables(workflowState, dependencies),
+  const tools = createComparatorTools(dependencies);
+  const resolveTarget = async ({ workflowState }: typeof ComparatorGraphState.State) => {
+    try {
+      const target = await dependencies.repository.resolveTarget(workflowState.listingUrl);
+      if (!target) return { workflowState: finishFailure(workflowState, "unsupported_property") };
+      if (target.reviewDecision !== "promote") return { workflowState: finishFailure({ ...workflowState, target }, "not_promoted") };
+      return { workflowState: Object.freeze({ ...workflowState, target, status: "collecting" as const }) };
+    } catch {
+      return { workflowState: finishFailure(workflowState, "persistence_failed") };
+    }
+  };
+  const lookupCache = async ({ workflowState }: typeof ComparatorGraphState.State) => {
+    const cacheLookup = await tools.lookupComparisonCache.invoke({ canonicalPropertyId: workflowState.target!.canonicalPropertyId });
+    return { cacheLookup, workflowState: Object.freeze({ ...workflowState, cacheStatus: cacheLookup.status }) };
+  };
+  const useFreshCache = ({ workflowState, cacheLookup }: typeof ComparatorGraphState.State) => ({
+    workflowState: finish({ ...workflowState, comparisonReference: cacheLookup?.status === "fresh" ? cacheLookup.publicReference : undefined, status: "completed", dataOrigin: "fresh_cache" }),
   });
-  return new StateGraph(ComparatorGraphState).addNode("execute_comparison", execute).addEdge(START, "execute_comparison").addEdge("execute_comparison", END).compile();
+  const collectProvider = async ({ workflowState }: typeof ComparatorGraphState.State) => {
+    const dates = representativeStayDates(new Date());
+    try {
+      const providerBatch = await tools.discoverNearbyStays.invoke({ location: [workflowState.target?.city, workflowState.target?.state].filter(Boolean).join(", "), limit: 15, currency: "USD", locale: "en-US", checkIn: dates.checkIn, checkOut: dates.checkOut });
+      return { providerBatch, providerFailed: providerBatch.records.length === 0 && providerBatch.errors.length > 0 };
+    } catch {
+      return { providerFailed: true };
+    }
+  };
+  const persistProviderResult = async ({ workflowState, providerBatch, cacheLookup }: typeof ComparatorGraphState.State) => {
+    const result = await persistDiscoveredComparables(workflowState, providerBatch!, dependencies);
+    const providerProducedNoUsableResult = result.failureCode === "provider_unavailable" || result.failureCode === "insufficient_candidates";
+    return { workflowState: providerProducedNoUsableResult && cacheLookup && cacheLookup.status !== "missing"
+      ? finish({ ...workflowState, comparisonReference: cacheLookup.publicReference, status: "partial", dataOrigin: "saved_fallback" })
+      : result };
+  };
+  const useStaleCache = ({ workflowState, cacheLookup }: typeof ComparatorGraphState.State) => ({
+    workflowState: finish({ ...workflowState, comparisonReference: cacheLookup && cacheLookup.status !== "missing" ? cacheLookup.publicReference : undefined, status: "partial", dataOrigin: "saved_fallback" }),
+  });
+  const providerUnavailable = ({ workflowState }: typeof ComparatorGraphState.State) => ({ workflowState: finishFailure(workflowState, "provider_unavailable") });
+  const enrich = async ({ workflowState }: typeof ComparatorGraphState.State) => ({ workflowState: await enrichComparables(workflowState, dependencies) });
+
+  // Conditional edges make the retrieval-first policy inspectable; no model chooses or executes these tools.
+  return new StateGraph(ComparatorGraphState)
+    .addNode("resolve_target", resolveTarget)
+    .addNode("lookup_cache", lookupCache)
+    .addNode("use_fresh_cache", useFreshCache)
+    .addNode("collect_provider", collectProvider)
+    .addNode("persist_provider_result", persistProviderResult)
+    .addNode("use_stale_cache", useStaleCache)
+    .addNode("provider_unavailable", providerUnavailable)
+    .addNode("enrich_comparables", enrich)
+    .addConditionalEdges(START, ({ workflowState }) => workflowState.intent === "discover" ? "discover" : "enrich", { discover: "resolve_target", enrich: "enrich_comparables" })
+    .addConditionalEdges("resolve_target", ({ workflowState }) => workflowState.failureCode ? "stop" : "lookup", { stop: END, lookup: "lookup_cache" })
+    .addConditionalEdges("lookup_cache", ({ workflowState, cacheLookup }) => cacheLookup?.status === "fresh" && !workflowState.bypassCache ? "cached" : "provider", { cached: "use_fresh_cache", provider: "collect_provider" })
+    .addConditionalEdges("collect_provider", ({ cacheLookup, providerFailed }) => !providerFailed ? "persist" : cacheLookup && cacheLookup.status !== "missing" ? "stale" : "unavailable", { persist: "persist_provider_result", stale: "use_stale_cache", unavailable: "provider_unavailable" })
+    .addEdge("use_fresh_cache", END)
+    .addEdge("persist_provider_result", END)
+    .addEdge("use_stale_cache", END)
+    .addEdge("provider_unavailable", END)
+    .addEdge("enrich_comparables", END)
+    .compile();
 }
 
-async function discoverComparables(state: StrComparatorWorkflowState, dependencies: { provider: StrComparatorProvider; repository: StrComparisonRepositoryPort }): Promise<StrComparatorWorkflowState> {
+async function persistDiscoveredComparables(state: StrComparatorWorkflowState, batch: ProviderBatch<DiscoveredListing>, dependencies: { provider: StrComparatorProvider; repository: StrComparisonRepositoryPort }): Promise<StrComparatorWorkflowState> {
   try {
-    const target = await dependencies.repository.resolveTarget(state.listingUrl);
-    if (!target) return finishFailure(state, "unsupported_property");
-    // Promotion is a hard server-side gate. The browser cannot unlock a provider call by changing local state.
-    if (target.reviewDecision !== "promote") return finishFailure({ ...state, target }, "not_promoted");
-    const cachedReference = await dependencies.repository.findFreshComparison(state.listingUrl);
-    if (cachedReference) return finish({ ...state, target, comparisonReference: cachedReference, status: "completed" });
-
+    const target = state.target!;
     const dates = representativeStayDates(new Date());
-    const batch = await dependencies.provider.discover({ location: [target.city, target.state].filter(Boolean).join(", "), limit: 15, currency: "USD", locale: "en-US", checkIn: dates.checkIn, checkOut: dates.checkOut });
     const normalized = batch.records.flatMap((record) => toPersistedCandidate(record, target, dates, dependencies.provider.rawPayload?.(record as object)));
     const comparatorCandidates = normalized.map((candidate) => toComparatorCandidate(candidate));
     const ranked = rankComparableCandidates(toComparatorTarget(target), comparatorCandidates, 5);
@@ -77,7 +134,7 @@ async function discoverComparables(state: StrComparatorWorkflowState, dependenci
     if ((await dependencies.repository.resolveTarget(state.listingUrl))?.reviewDecision !== "promote") return finishFailure({ ...state, target, runId }, "not_promoted");
     const summary = calculateComparatorSummary({ target: toComparatorTarget(target), candidates: selected.map((candidate) => toComparatorCandidate(candidate)) });
     await dependencies.repository.saveDiscovery(runId, selected, summary);
-    return finish({ ...state, target, runId, comparisonReference: publicReference, candidates: selected, summary, status: batch.errors.length ? "partial" : "completed" });
+    return finish({ ...state, target, runId, comparisonReference: publicReference, candidates: selected, summary, status: batch.errors.length ? "partial" : "completed", dataOrigin: "provider" });
   } catch {
     return finishFailure(state, "persistence_failed");
   }

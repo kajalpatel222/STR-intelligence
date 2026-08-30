@@ -13,6 +13,7 @@ import { ApifyAirbnbProvider } from "../sources/str-comparator/apify-provider.js
 import { StrComparisonRepository } from "../str-comparator/repository.js";
 import { createStrComparatorGraph } from "../workflow/str-comparator-graph.js";
 import { createStrComparisonsHandler } from "./str-comparisons.js";
+import { createStrComparableLibraryHandler } from "./str-comparable-library.js";
 
 const liveDependencies = {
   // These boundaries are emitted server-side for verification and never enter
@@ -33,6 +34,7 @@ const comparisonProvider = new ApifyAirbnbProvider({
   timeoutMs: 300_000,
 });
 const handleStrComparisons = createStrComparisonsHandler(createStrComparatorGraph({ provider: comparisonProvider, repository: comparisonRepository }), comparisonRepository);
+const handleStrComparableLibrary = createStrComparableLibraryHandler(comparisonRepository);
 const port = 8787;
 
 // Secrets are read only by server-side graph dependencies; this HTTP boundary
@@ -46,18 +48,21 @@ const server = createServer(async (request, response) => {
   const isReviewPut = request.method === "PUT" && request.url === "/api/listing-reviews";
   const comparisonMatch = request.url?.match(/^\/api\/str-comparisons\/([0-9a-f-]+)(?:\/(selections|evidence|refresh))?$/i);
   const isComparisonCreate = request.method === "POST" && request.url === "/api/str-comparisons";
+  const isComparableLibrary = request.method === "GET" && request.url === "/api/str-comparables";
   const isComparisonGet = request.method === "GET" && Boolean(comparisonMatch) && !comparisonMatch?.[2];
   const isComparisonSelect = request.method === "PUT" && comparisonMatch?.[2] === "selections";
   const isComparisonEvidence = request.method === "POST" && comparisonMatch?.[2] === "evidence";
   const isComparisonRefresh = request.method === "POST" && comparisonMatch?.[2] === "refresh";
-  if (!isPropertySearch && !isCriteriaGet && !isCriteriaPut && !isAttentionEvaluation && !isReviewsQuery && !isReviewPut && !isComparisonCreate && !isComparisonGet && !isComparisonSelect && !isComparisonEvidence && !isComparisonRefresh) {
+  if (!isPropertySearch && !isCriteriaGet && !isCriteriaPut && !isAttentionEvaluation && !isReviewsQuery && !isReviewPut && !isComparisonCreate && !isComparableLibrary && !isComparisonGet && !isComparisonSelect && !isComparisonEvidence && !isComparisonRefresh) {
     sendJson(response, 404, { status: "not_found", message: "Not found." });
     return;
   }
 
   try {
     const endpointStartedAt = performance.now();
-    const result = isComparisonCreate
+    const result = isComparableLibrary
+      ? await handleStrComparableLibrary()
+      : isComparisonCreate
       ? await handleStrComparisons.create(await readJson(request))
       : isComparisonGet
         ? await handleStrComparisons.get(comparisonMatch![1]!)
@@ -89,6 +94,8 @@ const server = createServer(async (request, response) => {
         ? "The request was not valid."
         : isPropertySearch
           ? "Property search is temporarily unavailable. Please try again later."
+          : isComparableLibrary || isComparisonCreate || isComparisonGet || isComparisonSelect || isComparisonEvidence || isComparisonRefresh
+            ? "STR comparison data is temporarily unavailable. Please try again later."
           : "Investment criteria are temporarily unavailable. Please try again later.",
     });
   }

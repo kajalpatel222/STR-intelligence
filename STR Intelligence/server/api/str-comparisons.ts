@@ -16,12 +16,8 @@ export function createStrComparisonsHandler(graph: GraphInvoker, repository: Str
     async create(input: unknown, refresh = false) {
       const body = asRecord(input);
       if (!isZillowUrl(body.listingUrl)) return response(400, { status: "invalid", message: "Choose a valid promoted Home listing." });
-      if (!refresh) {
-        const existing = await repository.findFreshComparison(body.listingUrl);
-        if (existing) return this.get(existing);
-      }
       return once(`discover:${body.listingUrl}`, async () => {
-        const result = await graph.invoke({ workflowState: initializeStrComparatorWorkflowState({ workflowId: crypto.randomUUID(), intent: "discover", listingUrl: body.listingUrl as string }) });
+        const result = await graph.invoke({ workflowState: initializeStrComparatorWorkflowState({ workflowId: crypto.randomUUID(), intent: "discover", listingUrl: body.listingUrl as string, bypassCache: refresh }) });
         if (result.workflowState.failureCode === "not_promoted") return response(409, { status: "not_promoted", message: "Promote this Home before comparing nearby stays." });
         if (!result.workflowState.comparisonReference) return response(503, { status: "unavailable", message: "Comparable stays are temporarily unavailable. Please try again." });
         return this.get(result.workflowState.comparisonReference);

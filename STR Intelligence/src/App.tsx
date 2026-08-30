@@ -9,6 +9,8 @@ import { loadListingReviews, saveListingReview } from "./listing-review-client";
 import { StrComparatorWorkspace } from "./StrComparatorWorkspace";
 import { StrComparatorPreview } from "./StrComparatorPreview";
 import { strComparatorClient, type StrComparisonDto } from "./str-comparator-client";
+import { StrComparableLibrary } from "./StrComparableLibrary";
+import { ProductHeader, type ProductView } from "./ProductHeader";
 
 type PropertyIntent = "homes" | "land";
 const SUPPORTED_LOCATIONS = ["Oakhurst, CA", "Mariposa, CA"] as const;
@@ -46,6 +48,7 @@ type PublicListing = {
 type SearchOutcome = { status: string; message: string; listingCount?: number; listings?: PublicListing[] };
 
 export default function App() {
+  const [activeView, setActiveView] = useState<ProductView>("search");
   const [message, setMessage] = useState("");
   const [location, setLocation] = useState<string>("Oakhurst, CA");
   const [isLocationOpen, setIsLocationOpen] = useState(false);
@@ -79,6 +82,8 @@ export default function App() {
     const listing = searchOutcome?.listings?.[comparatorListingIndex];
     if (listing?.url) return <StrComparatorWorkspace listingUrl={listing.url} propertyLabel={listing.address ?? listing.title} initialComparison={comparisons[comparatorListingIndex]} onBack={() => setComparatorListingIndex(null)} />;
   }
+
+  if (activeView === "library") return <StrComparableLibrary onNavigate={setActiveView} />;
 
   function chooseLocation(option: SupportedLocation) {
     setLocation(option);
@@ -236,13 +241,7 @@ export default function App() {
 
   return (
     <main className="app-shell product-home">
-      <header className="site-header">
-        <a className="brand" href="#top" aria-label="STR Intelligence home">
-          <span className="brand-mark">SI</span>
-          <span>STR Intelligence</span>
-        </a>
-        <span className="market-label">Property intelligence for thoughtful investors</span>
-      </header>
+      <ProductHeader activeView="search" onNavigate={setActiveView} />
 
       <section className="product-hero" id="top">
         <p className="eyebrow">Find your next opportunity</p>
