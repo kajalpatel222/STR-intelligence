@@ -9,7 +9,7 @@ import {
   type InvestmentCriteria,
 } from "../../shared/investment-criteria.js";
 
-export type WorkflowSearchFilters = Readonly<Record<string, unknown>>;
+export type WorkflowSearchFilters = NonNullable<ListingQuery["filters"]>;
 
 export type WorkflowSearchRequest = ListingQuery &
   Readonly<{

@@ -22,7 +22,7 @@ export function createComparatorTools(dependencies: {
     async (input) => dependencies.provider.discover(input),
     {
       name: "discover_nearby_strs",
-      description: "Collect nearby Airbnb stays for a promoted home when no fresh saved comparison is available.",
+      description: "Collect nearby Airbnb stays for an evaluated home when no fresh saved comparison is available.",
       schema: z.object({
         location: z.string().min(1),
         limit: z.number().int().min(1).max(15),

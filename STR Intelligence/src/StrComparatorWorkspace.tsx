@@ -42,7 +42,7 @@ export function StrComparatorWorkspace({
   }
 
   const target = comparison?.target;
-  const displayLabel = target?.address ?? propertyLabel ?? "Promoted home";
+  const displayLabel = target?.address ?? propertyLabel ?? "Selected home";
   const cachedAt = formatComparatorDate(comparison?.completedAt ?? comparison?.cachedAt);
 
   return (

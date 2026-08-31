@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   DEFAULT_INVESTMENT_CRITERIA,
   formatCriteriaCurrency,
@@ -6,67 +6,23 @@ import {
   type InvestmentCriteria,
   type AttentionMode,
 } from "../shared/investment-criteria";
-import {
-  investmentCriteriaClient,
-  type InvestmentCriteriaClient,
-} from "./investment-criteria-client";
-
 type InvestmentCriteriaPanelProps = Readonly<{
-  client?: InvestmentCriteriaClient;
   isApplying?: boolean;
   onApply?: (criteria: InvestmentCriteria) => Promise<void>;
 }>;
 
 export function InvestmentCriteriaPanel({
-  client = investmentCriteriaClient,
   isApplying = false,
   onApply,
 }: InvestmentCriteriaPanelProps) {
   const [maximumBudget, setMaximumBudget] = useState<number>(DEFAULT_INVESTMENT_CRITERIA.maximumPurchaseBudgetUsd);
   const [improvementReserve, setImprovementReserve] = useState<number>(DEFAULT_INVESTMENT_CRITERIA.maximumImprovementReserveUsd);
   const [mode, setMode] = useState<AttentionMode>(DEFAULT_INVESTMENT_CRITERIA.mode);
-  const [saveState, setSaveState] = useState<"idle" | "loading" | "saving" | "saved" | "error">("loading");
   const [feedback, setFeedback] = useState("");
-
-  useEffect(() => {
-    let active = true;
-    client.load().then((criteria) => {
-      if (!active) return;
-      setMaximumBudget(criteria.maximumPurchaseBudgetUsd);
-      setImprovementReserve(criteria.maximumImprovementReserveUsd);
-      setMode(criteria.mode);
-      setSaveState("idle");
-    }).catch(() => {
-      if (!active) return;
-      setSaveState("error");
-      setFeedback("Saved defaults could not be loaded. You can still edit these values.");
-    });
-    return () => { active = false; };
-  }, [client]);
-
-  async function saveDefaults() {
-    const result = currentCriteria();
-    if (!result.ok) {
-      setSaveState("error");
-      setFeedback(result.errors[0]?.message ?? "Check the investment criteria values.");
-      return;
-    }
-    setSaveState("saving");
-    setFeedback("");
-    try {
-      await client.save(result.value);
-      setSaveState("saved");
-      setFeedback("Defaults saved.");
-    } catch (error) {
-      setSaveState("error");
-      setFeedback(error instanceof Error ? error.message : "Defaults could not be saved.");
-    }
-  }
 
   async function applyCriteria() {
     const result = currentCriteria();
     if (!result.ok) {
-      setSaveState("error");
       setFeedback(result.errors[0]?.message ?? "Check the investment criteria values.");
       return;
     }
@@ -137,10 +93,7 @@ export function InvestmentCriteriaPanel({
         {onApply && <button type="button" onClick={applyCriteria} disabled={isApplying}>
           {isApplying ? "Applying…" : "Apply Criteria"}
         </button>}
-        <button type="button" onClick={saveDefaults} disabled={saveState === "loading" || saveState === "saving"}>
-          {saveState === "saving" ? "Saving…" : "Save defaults"}
-        </button>
-        {feedback && <p className={saveState === "error" ? "criteria-feedback is-error" : "criteria-feedback"} role={saveState === "error" ? "alert" : "status"}>{feedback}</p>}
+        {feedback && <p className="criteria-feedback" role="status">{feedback}</p>}
       </div>
     </section>
   );

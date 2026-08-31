@@ -6,7 +6,7 @@ The STR comparator uses a **deterministic retrieval-first cache-aside pattern wi
 
 ```text
 Resolve canonical Zillow property
-  -> enforce Promote decision
+  -> validate a stored existing-home target
   -> lookup_comparison_cache
      -> fresh: return the saved comparison
      -> stale or missing: discover_nearby_strs

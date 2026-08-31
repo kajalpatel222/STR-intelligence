@@ -4,7 +4,7 @@ import { createStrComparatorGraph, initializeStrComparatorWorkflowState, toPersi
 import type { StrComparatorProvider } from "../sources/str-comparator/provider.js";
 import type { ComparisonCacheLookup, ComparatorTargetRecord, PersistedComparable, PersistedEvidence, StoredComparison, StrComparisonRepositoryPort } from "../str-comparator/repository.js";
 
-const target: ComparatorTargetRecord = Object.freeze({ canonicalPropertyId: "private-property", listingSnapshotId: "private-snapshot", listingUrl: "https://www.zillow.com/homedetails/target", reviewDecision: "promote", city: "Oakhurst", state: "CA", bedrooms: 3, bathrooms: 2, latitude: 37.33, longitude: -119.65 });
+const target: ComparatorTargetRecord = Object.freeze({ canonicalPropertyId: "private-property", listingSnapshotId: "private-snapshot", listingUrl: "https://www.zillow.com/homedetails/target", city: "Oakhurst", state: "CA", bedrooms: 3, bathrooms: 2, latitude: 37.33, longitude: -119.65 });
 
 function fixtures(count = 7) { return Array.from({ length: count }, (_, index) => ({ provider: "airbnb" as const, listingId: `stay-${index}`, url: `https://www.airbnb.com/rooms/${index}`, title: `Stay ${index}`, roomType: "Entire home", latitude: 37.33 + index * .001, longitude: -119.65, bedrooms: 3, bathrooms: 2, maxGuests: 6, nightlyRate: 200 + index, scrapedAt: "2026-08-30T00:00:00.000Z" })); }
 
@@ -23,15 +23,6 @@ class MemoryRepository implements StrComparisonRepositoryPort {
 function provider(records = fixtures()): StrComparatorProvider & { calls: number } {
   return { calls: 0, async discover() { this.calls += 1; return { records, errors: [] }; }, async collectCalendars() { this.calls += 1; return { records: [], errors: [] }; } };
 }
-
-test("promotion gate prevents provider execution", async () => {
-  const repository = new MemoryRepository(); repository.target = { ...target, reviewDecision: "hold" };
-  const source = provider();
-  const graph = createStrComparatorGraph({ provider: source, repository });
-  const result = await graph.invoke({ workflowState: initializeStrComparatorWorkflowState({ workflowId: "wf", intent: "discover", listingUrl: target.listingUrl }) });
-  assert.equal(result.workflowState.failureCode, "not_promoted");
-  assert.equal(source.calls, 0);
-});
 
 test("discovery ranks and persists no more than five comparable stays", async () => {
   const repository = new MemoryRepository(); const source = provider();
@@ -108,12 +99,12 @@ test("sorts and deduplicates calendar dates before the 90-day signal", () => {
   assert.equal(evidence.rates.length, 2);
 });
 
-test("rechecks Promote after enrichment and before persistence", async () => {
+test("persists selected calendar evidence without a manual decision gate", async () => {
   const repository = new MemoryRepository();
   repository.loadComparison = async () => ({ publicReference: "4e14ec72-fdf3-45e7-8e5f-04835a476dde", status: "discovered", stage: "discovery", target: repository.target, candidates: repository.saved.map((item) => ({ ...item, included: true })) });
   repository.saved = [{ providerListingKey: "stay-1", listingUrl: "https://www.airbnb.com/rooms/1", latitude: 37.33, longitude: -119.65, distanceMiles: 1, bedrooms: 3, bathrooms: 2, guestCapacity: 6, amenities: [], observedNightlyPriceUsd: 200, observedCheckIn: "2026-09-11", observedCheckOut: "2026-09-13", similarityScore: 90, matchReasons: [], observedAt: "2026-08-30T00:00:00Z", rawPayload: {} }];
-  const source: StrComparatorProvider = { async discover() { return { records: [], errors: [] }; }, async collectCalendars() { repository.target = { ...target, reviewDecision: "hold" }; return { records: [{ provider: "airbnb", listingId: "stay-1", days: [{ date: "2026-09-01", available: true, nightlyRate: 210 }] }], errors: [] }; } };
+  const source: StrComparatorProvider = { async discover() { return { records: [], errors: [] }; }, async collectCalendars() { return { records: [{ provider: "airbnb", listingId: "stay-1", days: [{ date: "2026-09-01", available: true, nightlyRate: 210 }] }], errors: [] }; } };
   const result = await createStrComparatorGraph({ provider: source, repository }).invoke({ workflowState: initializeStrComparatorWorkflowState({ workflowId: "wf", intent: "enrich", listingUrl: target.listingUrl, comparisonReference: "4e14ec72-fdf3-45e7-8e5f-04835a476dde", selectedListingUrls: ["https://www.airbnb.com/rooms/1"] }) });
-  assert.equal(result.workflowState.failureCode, "not_promoted");
-  assert.equal(repository.evidence.length, 0);
+  assert.equal(result.workflowState.status, "completed");
+  assert.equal(repository.evidence.length, 1);
 });

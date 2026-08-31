@@ -4,6 +4,9 @@ type ServerEnvironment = Readonly<{
   apifyAirbnbDiscoveryActorId: string;
   apifyAirbnbCalendarActorId: string;
   supabaseServiceRoleKey?: string;
+  openRouterApiKey?: string;
+  openRouterBaseUrl: string;
+  openRouterModel?: string;
 }>;
 
 function required(name: string): string {
@@ -27,6 +30,9 @@ export function getServerEnvironment(): ServerEnvironment {
     apifyAirbnbDiscoveryActorId: optional("APIFY_AIRBNB_DISCOVERY_ACTOR_ID") ?? "unfenced-group/airbnb-scraper",
     apifyAirbnbCalendarActorId: optional("APIFY_AIRBNB_CALENDAR_ACTOR_ID") ?? "cirkit/airbnb-availability-scraper",
     supabaseServiceRoleKey: optional("SUPABASE_SERVICE_ROLE_KEY"),
+    openRouterApiKey: optional("OPENROUTER_API_KEY"),
+    openRouterBaseUrl: optional("OPENROUTER_BASE_URL") ?? "https://openrouter.ai/api/v1",
+    openRouterModel: optional("OPENROUTER_MODEL"),
   };
 }
 
@@ -37,5 +43,7 @@ export function getServerConfigurationStatus() {
     apifyAirbnbDiscoveryActorId: true,
     apifyAirbnbCalendarActorId: true,
     supabaseServiceRoleKey: Boolean(optional("SUPABASE_SERVICE_ROLE_KEY")),
+    openRouterApiKey: Boolean(optional("OPENROUTER_API_KEY")),
+    openRouterModel: Boolean(optional("OPENROUTER_MODEL")),
   } as const;
 }

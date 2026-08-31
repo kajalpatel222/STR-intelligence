@@ -3,7 +3,7 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { StrComparableCard } from "./StrComparableCard.js";
-import { sortComparableLibrary } from "./StrComparableLibrary.js";
+import { StrComparableLibrary, sortComparableLibrary } from "./StrComparableLibrary.js";
 import { loadStrComparableLibrary, type StrComparableLibraryItem } from "./str-comparable-library-client.js";
 
 function item(id: string, values: Partial<StrComparableLibraryItem> = {}): StrComparableLibraryItem {
@@ -17,6 +17,14 @@ test("sorts stored comparables by rating, closest distance, and highest booked-o
   assert.equal(sortComparableLibrary(items, "rating")[0]!.listingUrl.endsWith("/b"), true);
   assert.equal(sortComparableLibrary(items, "distance")[0]!.listingUrl.endsWith("/b"), true);
   assert.equal(sortComparableLibrary(items, "booking")[0]!.listingUrl.endsWith("/b"), true);
+});
+
+test("defaults the STR library to highest booked or blocked", () => {
+  const markup = renderToStaticMarkup(createElement(StrComparableLibrary, {
+    onNavigate: () => undefined,
+    loader: async () => [],
+  }));
+  assert.match(markup, /<option value="booking" selected="">Highest booked or blocked<\/option>/);
 });
 
 test("library client reads stored data through the read-only endpoint", async () => {

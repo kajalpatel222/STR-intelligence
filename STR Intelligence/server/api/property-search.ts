@@ -5,10 +5,14 @@ import type { ListingWorkflowState } from "../workflow/state.js";
 import { normalizeSupportedLocation } from "../markets/supported-markets.js";
 import type { InvestmentCriteriaRepository } from "../criteria/repository.js";
 import { DEFAULT_INVESTMENT_CRITERIA } from "../../shared/investment-criteria.js";
+import { parsePropertySearchQuery, validatePropertySearchRequest } from "../../shared/property-search-query.js";
 
 type PropertySearchInput = Readonly<{
+  query?: unknown;
   propertyType?: unknown;
   location?: unknown;
+  maximumPriceUsd?: unknown;
+  minimumBedrooms?: unknown;
 }>;
 
 type GraphInvoker = Readonly<{
@@ -20,14 +24,22 @@ export function createPropertySearchHandler(
   criteriaRepository?: Pick<InvestmentCriteriaRepository, "getDefaults">,
 ) {
   return async (input: PropertySearchInput) => {
-    if (input.propertyType !== "homes" && input.propertyType !== "land") {
-      return response(400, { status: "invalid", message: "Choose Homes or Land to start a search." });
+    const parsed = typeof input.query === "string"
+      ? parsePropertySearchQuery(input.query)
+      : validatePropertySearchRequest({
+        originalQuery: "",
+        propertyKind: input.propertyType === "homes" ? "existing_home" : input.propertyType === "land" ? "land" : input.propertyType,
+        location: locationInput(input.location),
+        constraints: { maximumPriceUsd: input.maximumPriceUsd, minimumBedrooms: input.minimumBedrooms },
+      });
+    if (!parsed.ok || !parsed.request.propertyKind || !parsed.request.location) {
+      return response(422, { status: "invalid", message: parsed.issues[0]?.message ?? "Describe the Homes or Land search you want to run.", issues: parsed.issues });
     }
-
-    const location = normalizeSupportedLocation(input.location);
-    if (!location) {
-      return response(422, { status: "unsupported", message: "Choose Oakhurst, CA or Mariposa, CA." });
+    if (parsed.request.propertyKind === "land" && parsed.request.constraints.minimumBedrooms !== undefined) {
+      return response(422, { status: "invalid", message: "Bedroom filters apply to Homes, not Land." });
     }
+    const propertyType = parsed.request.propertyKind === "land" ? "land" : "homes";
+    const location = normalizeSupportedLocation(`${parsed.request.location.city}, ${parsed.request.location.state}`)!;
 
     // Saved criteria are optional personalization; a missing/unavailable profile must never block listing search.
     const investmentCriteria = criteriaRepository
@@ -36,13 +48,13 @@ export function createPropertySearchHandler(
     const workflowState = initializeListingWorkflowState({
       workflowId: crypto.randomUUID(),
       searchRequest: {
-        source: input.propertyType === "land" ? "zillow_land" : "zillow_existing_home",
+        source: propertyType === "land" ? "zillow_land" : "zillow_existing_home",
         location,
         lookbackDays: 7,
         recordLimit: 5,
         listingCategory: "for_sale",
-        homeType: input.propertyType === "homes" ? "house" : undefined,
-        filters: {},
+        homeType: propertyType === "homes" ? "house" : undefined,
+        filters: { ...parsed.request.constraints },
       },
       investmentCriteria,
     });
@@ -54,8 +66,8 @@ export function createPropertySearchHandler(
     }
 
     const listings = finalState.normalizedListings.map(toPublicListing);
-    const singular = input.propertyType === "land" ? "land listing" : "home";
-    const plural = input.propertyType === "land" ? "land listings" : "homes";
+    const singular = propertyType === "land" ? "land listing" : "home";
+    const plural = propertyType === "land" ? "land listings" : "homes";
     return response(200, {
       status: listings.length ? "success" : "no_results",
       message: listings.length ? `Found ${listings.length} ${listings.length === 1 ? singular : plural} near ${location}.` : `No new ${plural} were found near ${location}.`,
@@ -63,6 +75,12 @@ export function createPropertySearchHandler(
       listings,
     });
   };
+}
+
+function locationInput(value: unknown) {
+  const normalized = normalizeSupportedLocation(value);
+  if (!normalized) return value;
+  return { id: normalized === "Oakhurst, CA" ? "oakhurst_ca" : "mariposa_ca" };
 }
 
 function toPublicListing(listing: NormalizedListingRecord) {

@@ -6,7 +6,7 @@ import type { ComparatorTargetRecord, PersistedComparable, PersistedEvidence, St
 import { createComparatorTools } from "../str-comparator/tools.js";
 
 export type StrComparatorIntent = "discover" | "enrich";
-export type StrComparatorWorkflowStatus = "initialized" | "not_promoted" | "collecting" | "persisting" | "completed" | "partial" | "failed";
+export type StrComparatorWorkflowStatus = "initialized" | "collecting" | "persisting" | "completed" | "partial" | "failed";
 
 export type StrComparatorWorkflowState = Readonly<{
   workflowId: string;
@@ -22,7 +22,7 @@ export type StrComparatorWorkflowState = Readonly<{
   status: StrComparatorWorkflowStatus;
   cacheStatus?: ComparisonCacheLookup["status"];
   dataOrigin?: "fresh_cache" | "provider" | "saved_fallback";
-  failureCode?: "not_promoted" | "unsupported_property" | "provider_unavailable" | "insufficient_candidates" | "persistence_failed";
+  failureCode?: "unsupported_property" | "provider_unavailable" | "insufficient_candidates" | "persistence_failed";
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
@@ -56,7 +56,6 @@ export function createStrComparatorGraph(dependencies: { provider: StrComparator
     try {
       const target = await dependencies.repository.resolveTarget(workflowState.listingUrl);
       if (!target) return { workflowState: finishFailure(workflowState, "unsupported_property") };
-      if (target.reviewDecision !== "promote") return { workflowState: finishFailure({ ...workflowState, target }, "not_promoted") };
       return { workflowState: Object.freeze({ ...workflowState, target, status: "collecting" as const }) };
     } catch {
       return { workflowState: finishFailure(workflowState, "persistence_failed") };
@@ -130,8 +129,6 @@ async function persistDiscoveredComparables(state: StrComparatorWorkflowState, b
     const publicReference = crypto.randomUUID();
     const requestSnapshot = { location: [target.city, target.state].filter(Boolean).join(", "), candidateLimit: 15, selectedLimit: 5, observedCheckIn: dates.checkIn, observedCheckOut: dates.checkOut };
     const runId = await dependencies.repository.createRun({ target, publicReference, cacheKey: `${target.listingSnapshotId}:v1:${dates.checkIn}`, request: requestSnapshot });
-    // Re-read immediately before writing so a concurrent Hold/Dismiss decision wins.
-    if ((await dependencies.repository.resolveTarget(state.listingUrl))?.reviewDecision !== "promote") return finishFailure({ ...state, target, runId }, "not_promoted");
     const summary = calculateComparatorSummary({ target: toComparatorTarget(target), candidates: selected.map((candidate) => toComparatorCandidate(candidate)) });
     await dependencies.repository.saveDiscovery(runId, selected, summary);
     return finish({ ...state, target, runId, comparisonReference: publicReference, candidates: selected, summary, status: batch.errors.length ? "partial" : "completed", dataOrigin: "provider" });
@@ -144,7 +141,7 @@ async function enrichComparables(state: StrComparatorWorkflowState, dependencies
   try {
     if (!state.comparisonReference) return finishFailure(state, "unsupported_property");
     const stored = await dependencies.repository.loadComparison(state.comparisonReference);
-    if (!stored || stored.target.reviewDecision !== "promote") return finishFailure(state, "not_promoted");
+    if (!stored) return finishFailure(state, "unsupported_property");
     const selectedUrls = new Set(state.selectedListingUrls.length ? state.selectedListingUrls : stored.candidates.filter((item) => item.included).map((item) => item.listingUrl));
     if (!selectedUrls.size || selectedUrls.size > 5) return finishFailure(state, "unsupported_property");
     const selected = stored.candidates.filter((item) => selectedUrls.has(item.listingUrl)).slice(0, 5);
@@ -152,7 +149,6 @@ async function enrichComparables(state: StrComparatorWorkflowState, dependencies
     const evidence = batch.records.flatMap((record) => toPersistedEvidence(record, dependencies.provider.rawPayload?.(record as object)));
     const calendarByKey = new Map(batch.records.map((item) => [item.listingId, item]));
     const summary = calculateComparatorSummary({ target: toComparatorTarget(stored.target), candidates: selected.map((item) => toComparatorCandidate(item, calendarByKey.get(item.providerListingKey))) });
-    if ((await dependencies.repository.resolveTarget(stored.target.listingUrl))?.reviewDecision !== "promote") return finishFailure({ ...state, target: stored.target }, "not_promoted");
     await dependencies.repository.saveEvidence(await internalRunId(dependencies.repository, state.comparisonReference), evidence, summary);
     return finish({ ...state, target: stored.target, candidates: selected, summary, status: batch.errors.length ? "partial" : "completed" });
   } catch {
@@ -187,7 +183,7 @@ function normalizedCalendarDays(calendar: ListingCalendar) { const byDate = new 
 function matchReasons(target: ComparatorTargetRecord, candidate: PersistedComparable) { const reasons: string[] = []; if (target.bedrooms === candidate.bedrooms) reasons.push("Same bedroom count"); if (target.bathrooms === candidate.bathrooms) reasons.push("Same bathroom count"); if (candidate.distanceMiles <= 10) reasons.push("Nearby location"); return reasons.length ? reasons : ["Closest overall property match"]; }
 function representativeStayDates(now: Date) { const checkIn = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 14)); const day = checkIn.getUTCDay(); checkIn.setUTCDate(checkIn.getUTCDate() + ((5 - day + 7) % 7)); const checkOut = new Date(checkIn); checkOut.setUTCDate(checkOut.getUTCDate() + 2); return { checkIn: checkIn.toISOString().slice(0, 10), checkOut: checkOut.toISOString().slice(0, 10) }; }
 function finish(state: StrComparatorWorkflowState): StrComparatorWorkflowState { return Object.freeze({ ...state, selectedListingUrls: Object.freeze([...state.selectedListingUrls]), candidates: Object.freeze([...state.candidates]), updatedAt: new Date().toISOString(), completedAt: new Date().toISOString() }); }
-function finishFailure(state: StrComparatorWorkflowState, failureCode: StrComparatorWorkflowState["failureCode"]): StrComparatorWorkflowState { return finish({ ...state, status: failureCode === "not_promoted" ? "not_promoted" : "failed", failureCode }); }
+function finishFailure(state: StrComparatorWorkflowState, failureCode: StrComparatorWorkflowState["failureCode"]): StrComparatorWorkflowState { return finish({ ...state, status: "failed", failureCode }); }
 function positive(value: unknown): value is number { return typeof value === "number" && Number.isFinite(value) && value > 0; }
 function nonNegative(value: unknown): value is number { return typeof value === "number" && Number.isFinite(value) && value >= 0; }
 function coordinate(value: unknown, min: number, max: number): value is number { return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max; }

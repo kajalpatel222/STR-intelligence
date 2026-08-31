@@ -13,7 +13,7 @@ const searchRequest: WorkflowSearchRequest = {
   recordLimit: 10,
   listingCategory: "for_sale",
   homeType: "house",
-  filters: { minBeds: 2 },
+  filters: { minimumBedrooms: 2 },
 };
 
 test("initializes workflow state with safe defaults and independent collections", () => {

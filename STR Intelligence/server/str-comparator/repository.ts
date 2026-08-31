@@ -6,7 +6,6 @@ export type ComparatorTargetRecord = Readonly<{
   canonicalPropertyId: string;
   listingSnapshotId: string;
   listingUrl: string;
-  reviewDecision: "promote" | "hold" | "dismiss";
   address?: string;
   city?: string;
   state?: string;
@@ -119,13 +118,12 @@ export class StrComparisonRepository implements StrComparisonRepositoryPort {
     if (mappingError) throw new Error("Unable to resolve the selected property.");
     if (!mapping) return undefined;
     const canonicalPropertyId = String(mapping.canonical_property_id);
-    const [{ data: property, error: propertyError }, { data: review, error: reviewError }, { data: snapshot, error: snapshotError }] = await Promise.all([
+    const [{ data: property, error: propertyError }, { data: snapshot, error: snapshotError }] = await Promise.all([
       this.client.from("canonical_properties").select("property_kind,address_line1,city,state,zip_code,lat,lng,beds,baths,building_sqft,current_use").eq("id", canonicalPropertyId).single(),
-      this.client.from("listing_reviews").select("decision").eq("canonical_property_id", canonicalPropertyId).maybeSingle(),
       this.client.from("listing_snapshots").select("id,listing_url,list_price,beds,baths,sqft,raw_payload").eq("canonical_property_id", canonicalPropertyId).order("observed_at", { ascending: false }).limit(1).maybeSingle(),
     ]);
-    if (propertyError || reviewError || snapshotError) throw new Error("Unable to load the selected property.");
-    if (!property || !snapshot || property.property_kind !== "existing_home" || !review) return undefined;
+    if (propertyError || snapshotError) throw new Error("Unable to load the selected property.");
+    if (!property || !snapshot || property.property_kind !== "existing_home") return undefined;
     const raw = asRecord(snapshot.raw_payload);
     const recovered = resolveTargetCoordinates(property, raw);
     if (!recovered) return undefined;
@@ -133,7 +131,6 @@ export class StrComparisonRepository implements StrComparisonRepositoryPort {
       canonicalPropertyId,
       listingSnapshotId: String(snapshot.id),
       listingUrl: String(snapshot.listing_url ?? listingUrl),
-      reviewDecision: review.decision as ComparatorTargetRecord["reviewDecision"],
       address: optionalText(property.address_line1), city: optionalText(property.city), state: optionalText(property.state), postalCode: optionalText(property.zip_code),
       price: optionalNumber(snapshot.list_price), bedrooms: optionalNumber(snapshot.beds ?? property.beds), bathrooms: optionalNumber(snapshot.baths ?? property.baths),
       livingAreaSqft: optionalNumber(snapshot.sqft ?? property.building_sqft), propertyType: optionalText(property.current_use), latitude: recovered.latitude, longitude: recovered.longitude,

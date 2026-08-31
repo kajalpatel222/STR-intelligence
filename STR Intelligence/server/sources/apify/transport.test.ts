@@ -1,6 +1,59 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
-import { buildZillowSearchUrl, mapApifyZillowRecord } from "./transport.js";
+import { ApifyTransport, buildZillowSearchUrl, mapApifyZillowRecord } from "./transport.js";
+
+test("caps both Actor results and charged results at five", async () => {
+  let submittedInput: Record<string, unknown> | undefined;
+  let submittedOptions: Record<string, unknown> | undefined;
+  const client = {
+    actor() {
+      return {
+        async start(input: Record<string, unknown>, options: Record<string, unknown>) {
+          submittedInput = input;
+          submittedOptions = options;
+          return { id: "run-1" };
+        },
+      };
+    },
+  };
+  const transport = new ApifyTransport({ client: client as never, actorId: "zillow-actor" });
+
+  await transport.submit({
+    source: "zillow_existing_home",
+    location: "Oakhurst, CA",
+    lookbackDays: 7,
+    recordLimit: 25,
+    listingCategory: "for_sale",
+  });
+
+  assert.equal(submittedInput?.resultsLimit, 5);
+  assert.equal(submittedOptions?.maxItems, 5);
+});
+
+test("treats the Actor's no-results sentinel as a successful empty collection", async () => {
+  const client = {
+    actor() {
+      return { async start() { return { id: "empty-run" }; } };
+    },
+    run() {
+      return { async get() { return { status: "SUCCEEDED", defaultDatasetId: "empty-dataset" }; } };
+    },
+    dataset() {
+      return { async listItems() { return { items: [{ error: "No results found." }] }; } };
+    },
+  };
+  const transport = new ApifyTransport({ client: client as never, actorId: "zillow-actor" });
+  await transport.submit({
+    source: "zillow_existing_home",
+    location: "Mariposa, CA",
+    lookbackDays: 7,
+    recordLimit: 5,
+    listingCategory: "for_sale",
+    filters: { maximumPriceUsd: 350_000, minimumBedrooms: 3 },
+  });
+
+  assert.deepEqual(await transport.results("empty-run"), []);
+});
 
 test("builds a deterministic Oakhurst Zillow URL with encoded searchQueryState", () => {
   const url = new URL(buildZillowSearchUrl(7));
@@ -31,6 +84,22 @@ test("builds distinct map bounds for Mariposa", () => {
   const mariposa = JSON.parse(new URL(buildZillowSearchUrl(7, "zillow_land", "Mariposa, CA")).searchParams.get("searchQueryState") ?? "") as { mapBounds: unknown };
   assert.notDeepEqual(mariposa.mapBounds, oakhurst.mapBounds);
   assert.deepEqual(mariposa.mapBounds, { west: -120.02, east: -119.82, south: 37.42, north: 37.58 });
+});
+
+test("encodes supported home constraints in Zillow searchQueryState", () => {
+  const url = new URL(buildZillowSearchUrl(7, "zillow_existing_home", "Oakhurst, CA", { maximumPriceUsd: 350_000, minimumBedrooms: 3 }));
+  const state = JSON.parse(url.searchParams.get("searchQueryState") ?? "") as { filterState: Record<string, { max?: number; min?: number; value?: unknown }> };
+  assert.deepEqual(state.filterState.price, { max: 350_000 });
+  assert.deepEqual(state.filterState.beds, { min: 3 });
+  assert.equal(state.filterState.isLotLand?.value, false);
+  assert.equal(state.filterState.doz?.value, "7");
+});
+
+test("encodes land price without adding a bedroom filter", () => {
+  const url = new URL(buildZillowSearchUrl(7, "zillow_land", "Mariposa, CA", { maximumPriceUsd: 200_000 }));
+  const state = JSON.parse(url.searchParams.get("searchQueryState") ?? "") as { filterState: Record<string, unknown> };
+  assert.deepEqual(state.filterState.price, { max: 200_000 });
+  assert.equal(state.filterState.beds, undefined);
 });
 
 test("maps an Apify Zillow dataset item into the normalized listing contract", () => {

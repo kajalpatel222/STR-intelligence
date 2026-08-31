@@ -2,6 +2,7 @@ import { ApifyClient } from "apify-client";
 import { getServerEnvironment } from "../../config/env.js";
 import type {
   ListingQuery,
+  ListingSearchFilters,
   NormalizedSourceRecordUnion,
   SourceRun,
 } from "../listing-source.js";
@@ -11,6 +12,7 @@ export function buildZillowSearchUrl(
   lookbackDays: number,
   source: ListingQuery["source"] = "zillow_existing_home",
   location: SupportedMarketLocation = "Oakhurst, CA",
+  filters: ListingSearchFilters = {},
 ) {
   const searchQueryState = {
     pagination: {},
@@ -21,6 +23,12 @@ export function buildZillowSearchUrl(
       ah: { value: true },
       doz: { value: String(Math.min(lookbackDays, 7)) },
       isLotLand: { value: source === "zillow_land" },
+      ...(filters.maximumPriceUsd !== undefined ? {
+        price: { max: filters.maximumPriceUsd },
+      } : {}),
+      ...(source === "zillow_existing_home" && filters.minimumBedrooms !== undefined ? {
+        beds: { min: filters.minimumBedrooms },
+      } : {}),
       ...(source === "zillow_land" ? {
         isAllHomes: { value: false },
         isSingleFamily: { value: false },
@@ -44,6 +52,7 @@ export class ApifyTransport {
   private client?: ApifyClient;
   private actorId?: string;
   private readonly resultLimits = new Map<string, number>();
+  private readonly queryFilters = new Map<string, ListingSearchFilters>();
 
   private readonly source: "zillow_existing_home" | "zillow_land";
 
@@ -65,12 +74,17 @@ export class ApifyTransport {
     const location = normalizeSupportedLocation(query.location);
     if (!location) throw new Error(`Unsupported Apify market: ${query.location}`);
     const { client, actorId } = this.liveConfiguration();
+    const resultLimit = Math.min(query.recordLimit, 5);
     const run = await client.actor(actorId).start({
-      searchUrls: [{ url: buildZillowSearchUrl(query.lookbackDays, this.source, location) }],
+      searchUrls: [{ url: buildZillowSearchUrl(query.lookbackDays, this.source, location, query.filters) }],
       extractionMethod: "MAP_MARKERS",
-      resultsLimit: Math.min(query.recordLimit, 5),
+      resultsLimit: resultLimit,
+    }, {
+      // Apify's run-level charged-results cap is separate from the Actor input limit.
+      maxItems: resultLimit,
     });
-    this.resultLimits.set(run.id, Math.min(query.recordLimit, 5));
+    this.resultLimits.set(run.id, resultLimit);
+    this.queryFilters.set(run.id, Object.freeze({ ...(query.filters ?? {}) }));
     return { source: query.source, externalRunId: run.id, status: "running" };
   }
 
@@ -86,7 +100,14 @@ export class ApifyTransport {
     const run = await client.run(externalRunId).get();
     if (!run?.defaultDatasetId) throw new Error("Actor run did not produce a dataset");
     const { items } = await client.dataset(run.defaultDatasetId).listItems({ limit: this.resultLimits.get(externalRunId) ?? 5 });
-    return items.map((item) => mapApifyZillowRecord(item as Record<string, unknown>, this.source));
+    const filters = this.queryFilters.get(externalRunId) ?? {};
+    return items.flatMap((item) => {
+      const providerRecord = item as Record<string, unknown>;
+      // This Actor emits a dataset sentinel for a valid empty search. Treating it
+      // as a provider failure would incorrectly present "unavailable" to users.
+      if (isNoResultsRecord(providerRecord)) return [];
+      return [enforceListingFilters(mapApifyZillowRecord(providerRecord, this.source), filters)];
+    });
   }
 
   private liveConfiguration() {
@@ -97,6 +118,21 @@ export class ApifyTransport {
     }
     return { client: this.client, actorId: this.actorId };
   }
+}
+
+function isNoResultsRecord(record: Record<string, unknown>) {
+  return typeof record.error === "string" && /^no results found\.?$/i.test(record.error.trim());
+}
+
+function enforceListingFilters(record: NormalizedSourceRecordUnion, filters: ListingSearchFilters): NormalizedSourceRecordUnion {
+  if (record.kind !== "listing") return record;
+  if (filters.maximumPriceUsd !== undefined && (record.price === undefined || record.price > filters.maximumPriceUsd)) {
+    return { kind: "provider_error", source: record.source, externalId: record.externalId, message: "Provider listing did not satisfy the maximum price filter", raw: record.raw };
+  }
+  if (filters.minimumBedrooms !== undefined && (record.beds === undefined || record.beds < filters.minimumBedrooms)) {
+    return { kind: "provider_error", source: record.source, externalId: record.externalId, message: "Provider listing did not satisfy the minimum bedrooms filter", raw: record.raw };
+  }
+  return record;
 }
 
 export function mapApifyZillowRecord(

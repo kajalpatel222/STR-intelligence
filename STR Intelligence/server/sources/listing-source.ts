@@ -1,5 +1,10 @@
 export type ListingSourceKind = "zillow_existing_home" | "zillow_land" | "land_parcel";
 
+export type ListingSearchFilters = Readonly<{
+  maximumPriceUsd?: number;
+  minimumBedrooms?: number;
+}>;
+
 export type ListingQuery = Readonly<{
   source: ListingSourceKind;
   location: string;
@@ -7,6 +12,7 @@ export type ListingQuery = Readonly<{
   recordLimit: number;
   listingCategory?: string;
   homeType?: string;
+  filters?: ListingSearchFilters;
 }>;
 
 export type SourceRunStatus = "pending" | "running" | "succeeded" | "failed" | "partial";

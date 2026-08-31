@@ -126,7 +126,7 @@ One immutable outcome for each canonical property and latest listing snapshot in
 
 ### `listing_reviews`
 
-Stores the current Promote, Hold, or Dismiss decision for each canonical property. The browser sends only the public listing URL; Node resolves the canonical property and performs the service-role write. RLS remains closed to direct browser access.
+Legacy table retained for migration history. Manual Promote, Hold, and Dismiss decisions are no longer part of the active application flow; runtime code does not read or write this table. RLS remains closed to direct browser access.
 
 ### `str_analysis_runs`
 
@@ -148,6 +148,8 @@ Stores the structured financial analysis for a property or listing snapshot.
 - `pros`
 - `cons`
 - `human_review_status`
+
+Migration `20260830_0008_financial_analysis_snapshots.sql` extends each immutable version with the complete validated `assumptions_snapshot`, deterministic `result_snapshot`, safe `property_snapshot`, methodology version, and dashboard summary columns. The Node API resolves the public Zillow URL to the canonical property and owns all reads/writes through the service-role boundary. The browser never receives canonical-property, listing-snapshot, or analysis-run IDs. The Financial Dashboard reads the latest valid version for each property and defaults to descending cash-on-cash return.
 
 ### `str_revenue_scenarios`
 
@@ -246,3 +248,6 @@ Derived semantic/hybrid search layer.
 - The schema starts with the minimum set of fields needed for ingestion, deduplication, analysis, ranking, and review.
 - Additional source-specific attributes can live in `raw_payload` until they become important enough to normalize.
 - Build concepts are modeled as upgrade/scenario rows rather than a separate property type.
+# Phase 7 STR Potential Evaluations
+
+`str_potential_evaluations` stores immutable, versioned qualitative evaluations for canonical Homes. Each row references the listing snapshot and optional saved financial analysis used as evidence, and stores sanitized evidence and structured evaluation snapshots. The table is server-managed with RLS enabled and no browser policy; OpenRouter credentials and raw provider payloads never enter it or the public DTO.

@@ -5,9 +5,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { formatLandArea } from "./listing-format.js";
 import { DEFAULT_INVESTMENT_CRITERIA, formatCriteriaCurrency } from "../shared/investment-criteria.js";
 import { InvestmentCriteriaPanel } from "./InvestmentCriteriaPanel.js";
-import { canOpenStrComparator, rankListingIndexes } from "./App.js";
+import App, { canAnalyzeListing, ParsedSearchChips, QUICK_SEARCHES, rankListingIndexes } from "./App.js";
+import { parsePropertySearchQuery } from "../shared/property-search-query.js";
 import type { PublicAttentionEvaluation } from "../shared/attention-api.js";
-import { ListingReviewControls } from "./ListingReviewControls.js";
 
 test("formats source acreage without losing parcel precision", () => {
   assert.equal(formatLandArea({ lotAcres: 5, lotSqft: 217800 }), "5 acres");
@@ -42,7 +42,10 @@ test("renders only the approved accessible investment criteria controls", () => 
   assert.match(markup, /role="tooltip"/);
   assert.match(markup, /aria-describedby="criteria-mode-tooltip"/);
   assert.match(markup, /aria-label="About Strict and Flexible modes"/);
-  assert.match(markup, /Save defaults/);
+  assert.equal(markup.includes("Save defaults"), false);
+  assert.match(markup, /value="400000"/);
+  assert.match(markup, /value="40000"/);
+  assert.match(markup, /checked="" value="flexible"/);
   assert.match(markup, /Flexible keeps near-misses with a proportional penalty/);
 });
 
@@ -68,25 +71,30 @@ test("ranks evaluated homes by Attention then Confidence while preserving stable
   assert.deepEqual(rankListingIndexes(3, [evaluation(0, 70, 70), evaluation(1, 70, 70)]), [0, 1, 2]);
 });
 
-test("renders accessible native radio review choices without note controls", () => {
-  const baseProps = { propertyLabel: "123 Pine Street", groupName: "review-1", onDecision: () => undefined };
-  const emptyMarkup = renderToStaticMarkup(createElement(ListingReviewControls, baseProps));
-  assert.match(emptyMarkup, /Your decision/);
-  assert.equal((emptyMarkup.match(/type="radio"/g) ?? []).length, 3);
-  assert.equal((emptyMarkup.match(/name="review-1"/g) ?? []).length, 3);
-  assert.equal(emptyMarkup.includes("Optional note"), false);
-  assert.equal(emptyMarkup.includes("Add a short reason"), false);
-
-  const promotedMarkup = renderToStaticMarkup(createElement(ListingReviewControls, { ...baseProps, decision: "promote" }));
-  assert.match(promotedMarkup, /checked="" value="promote"/);
-  const savingMarkup = renderToStaticMarkup(createElement(ListingReviewControls, { ...baseProps, decision: "promote", isSaving: true, feedback: "Saving…" }));
-  assert.equal((savingMarkup.match(/disabled=""/g) ?? []).length, 3);
-  assert.match(savingMarkup, /role="status">Saving/);
+test("offers financial analysis only when a listing has a usable purchase price", () => {
+  assert.equal(canAnalyzeListing({ price: 327000 }), true);
+  assert.equal(canAnalyzeListing({ price: 0 }), false);
+  assert.equal(canAnalyzeListing({ price: Number.NaN }), false);
+  assert.equal(canAnalyzeListing({}), false);
 });
 
-test("unlocks the comparator only after a Promote decision is safely persisted", () => {
-  assert.equal(canOpenStrComparator("promote", "saved"), true);
-  assert.equal(canOpenStrComparator("promote", "saving"), false);
-  assert.equal(canOpenStrComparator("hold", "saved"), false);
-  assert.equal(canOpenStrComparator(undefined, undefined), false);
+test("renders one prominent natural-language property search without duplicate controls", () => {
+  const markup = renderToStaticMarkup(createElement(App));
+  assert.equal((markup.match(/<input/g) ?? []).length, 1);
+  assert.match(markup, /Find your next STR investment/);
+  assert.match(markup, /3\+ bedroom homes under \$350k in Oakhurst/);
+  assert.equal(markup.includes("Property type"), false);
+  assert.equal(markup.includes("Search location"), false);
+  assert.equal(markup.includes("No properties to show yet"), false);
+  for (const query of QUICK_SEARCHES) assert.equal(markup.includes(query), true);
+});
+
+test("renders concise parsed feedback for a supported search", () => {
+  const parsed = parsePropertySearchQuery("3+ bedroom homes under $350k in Oakhurst");
+  const markup = renderToStaticMarkup(createElement(ParsedSearchChips, { parsed, id: "parsed-search" }));
+  assert.match(markup, /Search understood/);
+  assert.match(markup, /Homes/);
+  assert.match(markup, /Oakhurst, CA/);
+  assert.match(markup, /≤ \$350k/);
+  assert.match(markup, /3\+ beds/);
 });

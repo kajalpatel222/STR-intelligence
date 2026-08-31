@@ -61,6 +61,32 @@ test("returns public listing data for a constrained home search", async () => {
   assert.equal(JSON.stringify(result.body).includes("secret"), false);
 });
 
+test("parses and propagates a natural-language home search", async () => {
+  const handler = createPropertySearchHandler({
+    async invoke({ workflowState }) {
+      assert.equal(workflowState.searchRequest.source, "zillow_existing_home");
+      assert.equal(workflowState.searchRequest.location, "Oakhurst, CA");
+      assert.deepEqual(workflowState.searchRequest.filters, { maximumPriceUsd: 350_000, minimumBedrooms: 3 });
+      return { workflowState: { ...workflowState, status: "completed", normalizedListings: [] } };
+    },
+  });
+  const result = await handler({ query: "3+ bedroom homes under $350,000 in Oakhurst" });
+  assert.equal(result.statusCode, 200);
+});
+
+test("supports land price constraints and rejects ambiguous or incompatible searches", async () => {
+  const handler = createPropertySearchHandler({
+    async invoke({ workflowState }) {
+      assert.equal(workflowState.searchRequest.source, "zillow_land");
+      assert.deepEqual(workflowState.searchRequest.filters, { maximumPriceUsd: 200_000, minimumBedrooms: undefined });
+      return { workflowState: { ...workflowState, status: "completed", normalizedListings: [] } };
+    },
+  });
+  assert.equal((await handler({ query: "Land under $200k in Mariposa" })).statusCode, 200);
+  assert.equal((await handler({ query: "4 bedroom homes under $700k near Yosemite" })).statusCode, 422);
+  assert.equal((await handler({ query: "3 bedroom land under $200k in Mariposa" })).statusCode, 422);
+});
+
 test("snapshots saved criteria into workflow state without changing routing", async () => {
   const handler = createPropertySearchHandler({
     async invoke({ workflowState }) {

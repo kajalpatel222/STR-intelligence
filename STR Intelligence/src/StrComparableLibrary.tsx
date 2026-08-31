@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { StrComparableCard } from "./StrComparableCard.js";
 import { loadStrComparableLibrary, type StrComparableLibraryItem } from "./str-comparable-library-client.js";
 import { ProductHeader, type ProductView } from "./ProductHeader.js";
@@ -10,7 +10,7 @@ export function StrComparableLibrary({ onNavigate, loader = loadStrComparableLib
   loader?: () => Promise<readonly StrComparableLibraryItem[]>;
 }>) {
   const [items, setItems] = useState<readonly StrComparableLibraryItem[]>([]);
-  const [sort, setSort] = useState<LibrarySort>("recent");
+  const [sort, setSort] = useState<LibrarySort>("booking");
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
   useEffect(() => {
@@ -44,7 +44,7 @@ export function StrComparableLibrary({ onNavigate, loader = loadStrComparableLib
 
     {status === "loading" && <div className="str-library__state" role="status"><span className="loading-spinner" aria-hidden="true" /><strong>Loading saved comparables…</strong></div>}
     {status === "error" && <div className="str-library__state str-library__state--error" role="alert"><strong>We could not load the STR library.</strong><span>Try again after confirming the local API is running.</span></div>}
-    {status === "ready" && sorted.length === 0 && <div className="str-library__state" role="status"><strong>No stored comparables yet.</strong><span>Promote a Home and compare it with nearby STRs to build this library.</span></div>}
+    {status === "ready" && sorted.length === 0 && <div className="str-library__state" role="status"><strong>No stored comparables yet.</strong><span>Apply criteria to a Home and compare it with nearby STRs to build this library.</span></div>}
     {status === "ready" && sorted.length > 0 && <section className="str-library__cards" aria-label="Stored STR comparables">
       {sorted.map((item, index) => <StrComparableCard key={item.listingUrl} candidate={item} rank={index + 1} context={libraryContext(item)} />)}
     </section>}
