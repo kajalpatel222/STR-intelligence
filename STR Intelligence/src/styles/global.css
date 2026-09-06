@@ -529,6 +529,8 @@ footer { display: flex; justify-content: space-between; gap: 20px; padding: 24px
 .market-listings__header > p:last-child { color: var(--muted); }
 .market-listings__filters { display: flex; align-items: end; flex-wrap: wrap; gap: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 12px 12px 0 0; background: rgba(250,250,247,.72); }
 .market-listings__filters label { display: grid; gap: 6px; color: #5d6b63; font: 700 .65rem "Manrope",sans-serif; }
+.market-listings__filters .market-listings__search { flex: 1 1 260px; }
+.market-listings__filters input { min-height: 40px; width: 100%; padding: 0 11px; border: 1px solid #c8d0ca; border-radius: 7px; background: white; color: var(--ink); font: 500 .78rem "Manrope",sans-serif; }
 .market-listings__filters select { min-height: 40px; padding: 0 34px 0 11px; border: 1px solid #c8d0ca; border-radius: 7px; background: white; color: var(--ink); }
 .market-listings__filters > strong { margin-left: auto; padding-bottom: 10px; font: 700 .72rem "Manrope",sans-serif; }
 .market-listings__table-wrap { overflow-x: auto; border: 1px solid var(--line); border-top: 0; }
