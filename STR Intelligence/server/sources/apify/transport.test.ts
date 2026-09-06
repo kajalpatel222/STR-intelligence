@@ -30,6 +30,17 @@ test("caps both Actor results and charged results at five", async () => {
   assert.equal(submittedOptions?.maxItems, 5);
 });
 
+test("uses the detail Actor for a submitted Zillow home URL", async () => {
+  let actorId = "";
+  let submittedInput: Record<string, unknown> | undefined;
+  const client = { actor(id: string) { actorId = id; return { async start(input: Record<string, unknown>) { submittedInput = input; return { id: "detail-run" }; } }; } };
+  const transport = new ApifyTransport({ client: client as never, actorId: "search-actor", detailActorId: "detail-actor" });
+  const listingUrl = "https://www.zillow.com/homedetails/1-Pine-Rd-Oakhurst-CA-93644/123_zpid/";
+  await transport.submit({ source: "zillow_existing_home", location: "Oakhurst, CA", lookbackDays: 7, recordLimit: 1, listingUrl });
+  assert.equal(actorId, "detail-actor");
+  assert.deepEqual(submittedInput, { propertyUrls: [listingUrl], maxListings: 1, includeDetails: true, listingType: "for_sale" });
+});
+
 test("treats the Actor's no-results sentinel as a successful empty collection", async () => {
   const client = {
     actor() {
@@ -134,6 +145,40 @@ test("maps an Apify Zillow dataset item into the normalized listing contract", (
   assert.equal(result.longitude, -119.65);
   assert.equal(result.propertyType, "SINGLE_FAMILY");
   assert.equal(result.statusText, "FOR_SALE");
+});
+
+test("maps the Zillow detail Actor output into the shared listing contract", () => {
+  const result = mapApifyZillowRecord({
+    zpid: 123,
+    propertyUrl: "https://www.zillow.com/homedetails/1-Pine-Rd-Oakhurst-CA-93644/123_zpid/",
+    listingAddress: { full: "1 Pine Rd, Oakhurst, CA 93644", city: "Oakhurst", state: "CA", zipCode: "93644", county: "Madera County" },
+    listingPrice: { amount: 349000 }, bedrooms: 3, bathrooms: 2, livingArea: 1450,
+    lotArea: { value: 0.5, unit: "acres" }, coordinates: { latitude: 37.3, longitude: -119.6 },
+    mainImage: { medium: "https://photos.example.com/detail.jpg" }, homeType: "SINGLE_FAMILY", listingStatus: "forSale", description: "Mountain home",
+  });
+  assert.equal(result.kind, "listing");
+  if (result.kind !== "listing") return;
+  assert.equal(result.address, "1 Pine Rd, Oakhurst, CA 93644");
+  assert.equal(result.county, "Madera County");
+  assert.equal(result.price, 349000);
+  assert.equal(result.lotSqft, 21780);
+  assert.equal(result.imageUrl, "https://photos.example.com/detail.jpg");
+  assert.equal(result.description, "Mountain home");
+});
+
+test("maps the verified direct-property Actor output shape", () => {
+  const result = mapApifyZillowRecord({
+    zpid: "19235521", url: "https://www.zillow.com/homedetails/5655-Harris-Cut-Off-Rd-Mariposa-CA-95338/19235521_zpid/",
+    address: "5655 Harris Cut Off Rd", city: "Mariposa", state: "CA", zipcode: "95338",
+    price: 409000, bedrooms: 3, bathrooms: 2, livingArea: 1500, lotSize: 58370,
+    latitude: 37.469055, longitude: -119.737885, propertyType: "SINGLE_FAMILY", homeStatus: "FOR_SALE",
+    photos: ["https://photos.zillowstatic.com/example.jpg"],
+  });
+  assert.equal(result.kind, "listing");
+  if (result.kind !== "listing") return;
+  assert.equal(result.price, 409000);
+  assert.equal(result.lotSqft, 58370);
+  assert.equal(result.imageUrl, "https://photos.zillowstatic.com/example.jpg");
 });
 
 test("contains malformed dataset items as provider errors", () => {

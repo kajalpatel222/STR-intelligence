@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
-import { StrComparisonRepository, resolveTargetCoordinates, rowToStoredComparable } from "./repository.js";
+import { calculateCalendarWindows, StrComparisonRepository, resolveTargetCoordinates, rowToStoredComparable } from "./repository.js";
 
 function cacheClient(row: Record<string, unknown> | null, error: unknown = null) {
   const filters: Array<readonly [string, unknown]> = [];
@@ -61,6 +61,16 @@ test("returns missing when a canonical property has no saved comparison", async 
   );
 });
 
+test("resolves the newest saved comparison reference for each Zillow URL", async () => {
+  const listingUrl = "https://www.zillow.com/homedetails/123";
+  const queries = {
+    property_source_ids: { select() { return this; }, in() { return Promise.resolve({ data: [{ canonical_property_id: "property-1", external_url: listingUrl }], error: null }); } },
+    str_comparison_runs: { select() { return this; }, in() { return this; }, order() { return Promise.resolve({ data: [{ canonical_property_id: "property-1", public_reference: "newest-reference" }, { canonical_property_id: "property-1", public_reference: "older-reference" }], error: null }); } },
+  };
+  const repository = new StrComparisonRepository({ from(table: keyof typeof queries) { return queries[table]; } } as never);
+  assert.deepEqual(await repository.findSavedComparisons([listingUrl]), { [listingUrl]: "newest-reference" });
+});
+
 test("deduplicates the library by Airbnb identity and keeps closest cross-property distance", async () => {
   const base = { provider_listing_key: "stay-1", listing_url: "https://www.airbnb.com/rooms/1", latitude: 37, longitude: -119,
     amenities: [], observed_nightly_price_usd: 220, observed_check_in: "2026-09-11", observed_check_out: "2026-09-13",
@@ -69,15 +79,24 @@ test("deduplicates the library by Airbnb identity and keeps closest cross-proper
     { ...base, title: "Latest title", distance_miles: 2.4, observed_at: "2026-08-30T00:00:00Z", comparison_run: { status: "discovered", canonical_property_id: "property-1", canonical_properties: { address_line1: "One Main St", city: "Oakhurst", state: "CA" } } },
     { ...base, title: "Older title", distance_miles: .8, observed_at: "2026-08-20T00:00:00Z", comparison_run: { status: "discovered", canonical_property_id: "property-2", canonical_properties: { address_line1: "Two Main St", city: "Mariposa", state: "CA" } } },
   ];
-  const query = { select() { return this; }, in() { return this; }, order() { return this; }, limit() { return Promise.resolve({ data: rows, error: null }); } };
-  const repository = new StrComparisonRepository({ from(table: string) { assert.equal(table, "str_comparison_candidates"); return query; } } as never);
+  const queries = {
+    str_comparison_candidates: { select() { return this; }, in() { return this; }, order() { return this; }, limit() { return Promise.resolve({ data: rows, error: null }); } },
+    listing_snapshots: { select() { return this; }, in() { return this; }, order() { return Promise.resolve({ data: [
+      { canonical_property_id: "property-1", listing_url: "https://www.zillow.com/homedetails/one", raw_payload: { imgSrc: "https://photos.example.com/one.jpg" }, observed_at: "2026-08-30" },
+      { canonical_property_id: "property-2", listing_url: "https://www.zillow.com/homedetails/two", raw_payload: { imageUrl: "https://photos.example.com/two.jpg" }, observed_at: "2026-08-29" },
+    ], error: null }); } },
+  };
+  const repository = new StrComparisonRepository({ from(table: keyof typeof queries) { return queries[table]; } } as never);
 
   const result = await repository.listComparableLibrary();
   assert.equal(result.length, 1);
   assert.equal(result[0]!.comparable.title, "Latest title");
   assert.equal(result[0]!.comparable.distanceMiles, .8);
   assert.equal(result[0]!.associatedPropertyCount, 2);
-  assert.deepEqual(result[0]!.associatedProperties, ["One Main St, Oakhurst, CA", "Two Main St, Mariposa, CA"]);
+  assert.deepEqual(result[0]!.associatedProperties, [
+    { listingUrl: "https://www.zillow.com/homedetails/one", address: "One Main St, Oakhurst, CA", imageUrl: "https://photos.example.com/one.jpg" },
+    { listingUrl: "https://www.zillow.com/homedetails/two", address: "Two Main St, Mariposa, CA", imageUrl: "https://photos.example.com/two.jpg" },
+  ]);
 });
 
 test("maps only the latest immutable evidence batch into the comparable card", () => {
@@ -108,6 +127,31 @@ test("maps absent latest evidence without inventing zero values", () => {
   const comparable = rowToStoredComparable({ provider_listing_key: "key", listing_url: "https://www.airbnb.com/rooms/2", latitude: 37, longitude: -119, distance_miles: 1, amenities: [], observed_nightly_price_usd: 180, observed_check_in: "2026-09-11", observed_check_out: "2026-09-13", similarity_score: 80, match_reasons: [], observed_at: "2026-08-30T00:00:00Z", raw_payload: {}, str_rate_observations: [], str_calendar_snapshots: [] });
   assert.equal(comparable.estimatedAdrUsd, undefined);
   assert.equal(comparable.calendarUnavailablePercentage, undefined);
+});
+
+test("derives supported booking windows from real nightly observations", () => {
+  const observations = Array.from({ length: 90 }, (_, index) => ({
+    date: `2026-09-${String(index + 1).padStart(2, "0")}`,
+    available: index % 3 !== 0,
+  }));
+  const windows = calculateCalendarWindows(observations);
+  assert.deepEqual(windows.map((item) => item.days), [15, 30, 45, 60, 90]);
+  assert.deepEqual(windows[0], { days: 15, unavailableNights: 5, observationCount: 15, unavailablePercentage: 33.3 });
+});
+
+test("does not extrapolate a calendar window without enough nightly evidence", () => {
+  const observations = Array.from({ length: 29 }, (_, index) => ({ date: `2026-09-${index + 1}`, available: true }));
+  assert.deepEqual(calculateCalendarWindows(observations).map((item) => item.days), [15]);
+});
+
+test("anchors forward-looking windows to the snapshot observation date", () => {
+  const observations = Array.from({ length: 45 }, (_, index) => {
+    const date = new Date("2026-08-01T00:00:00Z");
+    date.setUTCDate(date.getUTCDate() + index);
+    return { date: date.toISOString().slice(0, 10), available: index < 30 };
+  });
+  const windows = calculateCalendarWindows(observations, "2026-08-30T12:00:00Z");
+  assert.deepEqual(windows, [{ days: 15, unavailableNights: 14, observationCount: 15, unavailablePercentage: 93.3 }]);
 });
 
 test("recovers target coordinates from a legacy snapshot instead of accepting zero", () => {

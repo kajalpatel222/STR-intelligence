@@ -12,6 +12,8 @@ import { ProductHeader, type ProductView } from "./ProductHeader";
 import { FinancialAnalysisWorkspace } from "./FinancialAnalysisWorkspace";
 import { FinancialDashboard } from "./FinancialDashboard";
 import { parsePropertySearchQuery, type PropertySearchQueryResult } from "../shared/property-search-query";
+import { validateZillowListingUrl } from "../shared/zillow-listing-url";
+import { MarketListings } from "./MarketListings";
 
 type PropertyIntent = "homes" | "land";
 const SUPPORTED_LOCATIONS = ["Oakhurst, CA", "Mariposa, CA"] as const;
@@ -21,9 +23,10 @@ type SearchRequestDraft = {
   source: "zillow_existing_home" | "zillow_land";
   location: SupportedLocation;
   lookbackDays: 7;
-  recordLimit: 5;
+  recordLimit: 1 | 5;
   filters: Readonly<{ maximumPriceUsd?: number; minimumBedrooms?: number }>;
   originalQuery: string;
+  mode?: "search" | "direct";
 };
 
 type PublicListing = {
@@ -52,6 +55,8 @@ type SearchOutcome = { status: string; message: string; listingCount?: number; l
 export default function App() {
   const [activeView, setActiveView] = useState<ProductView>("search");
   const [message, setMessage] = useState("");
+  const [listingUrl, setListingUrl] = useState("");
+  const [listingUrlError, setListingUrlError] = useState("");
   const [searchRequest, setSearchRequest] = useState<SearchRequestDraft | null>(null);
   const [intentError, setIntentError] = useState("");
   const [isEditingSearch, setIsEditingSearch] = useState(false);
@@ -111,6 +116,7 @@ export default function App() {
 
   if (activeView === "library") return <StrComparableLibrary onNavigate={setActiveView} />;
   if (activeView === "financials") return <FinancialDashboard onNavigate={setActiveView} />;
+  if (activeView === "markets") return <MarketListings onNavigate={setActiveView} />;
 
   async function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -153,6 +159,20 @@ export default function App() {
     } finally {
       setIsSearching(false);
     }
+  }
+
+  async function submitListingUrl(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const validation = validateZillowListingUrl(listingUrl);
+    if ("message" in validation) { setListingUrlError(validation.message); return; }
+    const request: SearchRequestDraft = { source: "zillow_existing_home", location: validation.location, lookbackDays: 7, recordLimit: 1, filters: {}, originalQuery: validation.url, mode: "direct" };
+    setListingUrlError(""); setSearchRequest(request); setSearchOutcome(null); setAttentionEvaluations([]); setComparisons({}); setComparisonErrors({}); setIsSearching(true); setIsEditingSearch(false);
+    try {
+      const response = await fetch("/api/property-search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ listingUrl: validation.url }) });
+      setSearchOutcome(await response.json() as SearchOutcome);
+    } catch {
+      setSearchOutcome({ status: "unavailable", message: "That Zillow listing is temporarily unavailable. Please try again later." });
+    } finally { setIsSearching(false); }
   }
 
   async function applyCriteria(criteria: InvestmentCriteria) {
@@ -208,6 +228,18 @@ export default function App() {
           </div>}
         </form>}
 
+        {(!searchRequest || isEditingSearch) && <div className="direct-listing-entry">
+          <div className="search-divider" aria-hidden="true"><span>or</span></div>
+          <form onSubmit={submitListingUrl}>
+            <label htmlFor="listing-url"><strong>Already have a listing in mind?</strong><span>Share its Zillow URL to review the property directly.</span></label>
+            <div className="natural-search-form__row">
+              <input id="listing-url" type="url" inputMode="url" disabled={isSearching} value={listingUrl} onChange={(event) => { setListingUrl(event.target.value); setListingUrlError(""); }} placeholder="https://www.zillow.com/homedetails/…" autoComplete="url" aria-describedby={listingUrlError ? "listing-url-error" : undefined} />
+              <button type="submit" disabled={isSearching || !listingUrl.trim()}>{isSearching ? "Loading…" : "Review listing"}</button>
+            </div>
+            {listingUrlError && <p className="form-error" id="listing-url-error" role="alert">{listingUrlError}</p>}
+          </form>
+        </div>}
+
         {searchRequest && !isEditingSearch && <SearchRequestSummary request={searchRequest} />}
 
         <div className="property-results">
@@ -215,7 +247,7 @@ export default function App() {
           {isSearching ? (
             <div className="assistant-response search-loading" role="status" aria-live="polite">
               <span className="loading-spinner" aria-hidden="true" />
-              <div><strong>Searching for {searchRequest?.source === "zillow_land" ? "land" : "homes"} near {searchRequest?.location}…</strong><p>This can take a few minutes. Please keep this page open.</p></div>
+              <div><strong>{searchRequest?.mode === "direct" ? "Loading your Zillow property…" : `Searching for ${searchRequest?.source === "zillow_land" ? "land" : "homes"} near ${searchRequest?.location}…`}</strong><p>This can take a few minutes. Please keep this page open.</p></div>
             </div>
           ) : searchOutcome ? (
             <div className="assistant-response" role="status" aria-live="polite">

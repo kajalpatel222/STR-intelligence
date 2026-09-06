@@ -55,7 +55,7 @@ export function validateInvestmentCriteria(input: unknown):
 
 export function createInvestmentCriteriaSnapshot(input: InvestmentCriteria): InvestmentCriteria {
   const result = validateInvestmentCriteria(input);
-  if (!result.ok) throw new Error(result.errors[0]?.message ?? "Investment criteria are invalid.");
+  if ("errors" in result) throw new Error(result.errors[0]?.message ?? "Investment criteria are invalid.");
   return result.value;
 }
 

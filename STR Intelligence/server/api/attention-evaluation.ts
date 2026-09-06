@@ -15,7 +15,7 @@ export async function handleAttentionEvaluation(input: unknown) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return invalid("Attention criteria and listings are required.");
   const body = input as Record<string, unknown>;
   const criteria = validateInvestmentCriteria(body.criteria);
-  if (!criteria.ok) return invalid(criteria.errors[0]?.message ?? "Check the investment criteria values.");
+  if ("errors" in criteria) return invalid(criteria.errors[0]?.message ?? "Check the investment criteria values.");
   if (!Array.isArray(body.listings) || body.listings.length === 0 || body.listings.length > MAX_LISTINGS_PER_EVALUATION) {
     return invalid(`Provide between 1 and ${MAX_LISTINGS_PER_EVALUATION} home listings.`);
   }

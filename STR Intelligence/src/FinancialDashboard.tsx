@@ -5,6 +5,8 @@ import { loadFinancialAnalyses } from "./financial-analysis-client.js";
 import { formatFinancialCurrency, formatFinancialRatio } from "./financial-analysis-state.js";
 import { ProductHeader, type ProductView } from "./ProductHeader.js";
 import { StrPotentialWorkspace } from "./StrPotentialWorkspace.js";
+import { StrComparatorWorkspace } from "./StrComparatorWorkspace.js";
+import { loadSavedStrComparison, loadSavedStrComparisonLinks, type StrComparisonDto } from "./str-comparator-client.js";
 
 export type FinancialDashboardSort = "cash-on-cash" | "cash-flow" | "recent";
 
@@ -17,15 +19,30 @@ export function FinancialDashboard({ onNavigate, loader = loadFinancialAnalyses 
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [selected, setSelected] = useState<SavedFinancialAnalysis | null>(null);
   const [potentialListingUrl, setPotentialListingUrl] = useState<string | null>(null);
+  const [comparisonLinks, setComparisonLinks] = useState<Readonly<Record<string, string>>>({});
+  const [savedComparison, setSavedComparison] = useState<StrComparisonDto | null>(null);
+  const [comparisonLoadingUrl, setComparisonLoadingUrl] = useState<string | null>(null);
+  const [comparisonErrorUrl, setComparisonErrorUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    void loader().then((result) => { if (active) { setItems(result); setStatus("ready"); } })
+    void loader().then((result) => { if (active) { setItems(result); setStatus("ready"); void loadSavedStrComparisonLinks(result.map((item) => item.property.listingUrl)).then((links) => { if (active) setComparisonLinks(links); }).catch(() => undefined); } })
       .catch(() => { if (active) setStatus("error"); });
     return () => { active = false; };
   }, [loader]);
 
   if (potentialListingUrl) return <StrPotentialWorkspace listingUrl={potentialListingUrl} onBack={() => setPotentialListingUrl(null)} />;
+  if (savedComparison) return <StrComparatorWorkspace listingUrl={savedComparison.target.listingUrl} propertyLabel={savedComparison.target.address} initialComparison={savedComparison} onBack={() => setSavedComparison(null)} />;
+
+  async function openSavedComparison(listingUrl: string) {
+    const reference = comparisonLinks[listingUrl];
+    if (!reference || comparisonLoadingUrl) return;
+    setComparisonLoadingUrl(listingUrl);
+    setComparisonErrorUrl(null);
+    try { setSavedComparison(await loadSavedStrComparison(reference)); }
+    catch { setComparisonErrorUrl(listingUrl); }
+    finally { setComparisonLoadingUrl(null); }
+  }
 
   if (selected) return <FinancialAnalysisWorkspace
     listing={{
@@ -72,7 +89,7 @@ export function FinancialDashboard({ onNavigate, loader = loadFinancialAnalyses 
     {status === "error" && <DashboardState error><strong>We could not load the financial dashboard.</strong><span>Try again after confirming the local API is running.</span></DashboardState>}
     {status === "ready" && sorted.length === 0 && <DashboardState><strong>No saved financial analyses yet.</strong><span>Open a Home's financial analysis and choose Save to dashboard.</span></DashboardState>}
     {status === "ready" && sorted.length > 0 && <section className="financial-dashboard__cards" aria-label="Saved property financial analyses">
-      {sorted.map((analysis) => <FinancialDashboardCard key={analysis.property.listingUrl} analysis={analysis} onOpen={() => setSelected(analysis)} onEvaluate={() => setPotentialListingUrl(analysis.property.listingUrl)} />)}
+      {sorted.map((analysis) => <FinancialDashboardCard key={analysis.property.listingUrl} analysis={analysis} onOpen={() => setSelected(analysis)} onEvaluate={() => setPotentialListingUrl(analysis.property.listingUrl)} onOpenComparison={comparisonLinks[analysis.property.listingUrl] ? () => void openSavedComparison(analysis.property.listingUrl) : undefined} comparisonLoading={comparisonLoadingUrl === analysis.property.listingUrl} comparisonError={comparisonErrorUrl === analysis.property.listingUrl} />)}
     </section>}
   </main>;
 }
@@ -86,10 +103,13 @@ export function sortFinancialAnalyses(items: readonly SavedFinancialAnalysis[], 
   });
 }
 
-export function FinancialDashboardCard({ analysis, onOpen, onEvaluate }: Readonly<{
+export function FinancialDashboardCard({ analysis, onOpen, onEvaluate, onOpenComparison, comparisonLoading = false, comparisonError = false }: Readonly<{
   analysis: SavedFinancialAnalysis;
   onOpen(): void;
   onEvaluate?(): void;
+  onOpenComparison?(): void;
+  comparisonLoading?: boolean;
+  comparisonError?: boolean;
 }>) {
   const { property, result, assumptions } = analysis;
   return <article className="financial-dashboard-card">
@@ -98,7 +118,7 @@ export function FinancialDashboardCard({ analysis, onOpen, onEvaluate }: Readonl
       : <div className="financial-dashboard-card__fallback" role="img" aria-label="Property image unavailable">⌂</div>}
     <div className="financial-dashboard-card__identity">
       <p className="financial-kicker">Saved {formatSavedDate(analysis.savedAt)}</p>
-      <h2>{property.title}</h2>
+      <h2><a href={property.listingUrl} target="_blank" rel="noreferrer">{property.title}</a></h2>
       <p>{[property.address, property.location].filter(Boolean).join(" · ")}</p>
       <p className="financial-dashboard-card__facts">{[
         property.beds !== undefined ? `${property.beds} beds` : null,
@@ -107,8 +127,10 @@ export function FinancialDashboardCard({ analysis, onOpen, onEvaluate }: Readonl
       ].filter(Boolean).join(" · ")}</p>
       <div className="financial-dashboard-card__actions">
         <button type="button" onClick={onOpen}>View financial analysis</button>
+        {onOpenComparison && <button type="button" className="financial-dashboard-card__comparison" onClick={onOpenComparison} disabled={comparisonLoading}>{comparisonLoading ? "Opening nearby STRs…" : "View nearby STRs"}</button>}
         {onEvaluate && <button type="button" className="financial-dashboard-card__evaluate" onClick={onEvaluate}>Evaluate STR potential</button>}
       </div>
+      {comparisonError && <p className="financial-dashboard-card__comparison-error" role="alert">Saved comparison could not be opened. Please try again.</p>}
     </div>
     <div className="financial-dashboard-card__lead">
       <span>Cash-on-cash return</span>

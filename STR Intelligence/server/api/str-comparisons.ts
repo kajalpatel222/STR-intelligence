@@ -50,6 +50,32 @@ export function createStrComparisonsHandler(graph: GraphInvoker, repository: Str
         return this.get(reference);
       });
     },
+    async refreshCalendar(input: unknown) {
+      const body = asRecord(input);
+      const reference = typeof body.reference === "string" ? body.reference : "";
+      const listingUrl = typeof body.listingUrl === "string" ? body.listingUrl : "";
+      const stored = isUuid(reference) ? await repository.loadComparison(reference) : undefined;
+      if (!stored || !isAirbnbUrl(listingUrl) || !stored.candidates.some((item) => item.listingUrl === listingUrl)) {
+        return response(400, { status: "invalid", message: "Choose a valid comparable stay to refresh." });
+      }
+      return once(`calendar:${reference}:${listingUrl}`, async () => {
+        const result = await graph.invoke({ workflowState: initializeStrComparatorWorkflowState({ workflowId: crypto.randomUUID(), intent: "enrich", listingUrl: stored.target.listingUrl, comparisonReference: reference, selectedListingUrls: [listingUrl] }) });
+        if (result.workflowState.status === "failed") return response(503, { status: "unavailable", message: "Fresh calendar data is temporarily unavailable. Saved evidence remains available." });
+        return this.get(reference);
+      });
+    },
+  };
+}
+
+export function createStrComparisonLinksHandler(repository: Readonly<{
+  findSavedComparisons(listingUrls: readonly string[]): Promise<Readonly<Record<string, string>>>;
+}>) {
+  return async (input: unknown) => {
+    const body = asRecord(input);
+    if (!Array.isArray(body.listingUrls) || body.listingUrls.length > 200 || !body.listingUrls.every(isZillowUrl)) {
+      return response(400, { status: "invalid", message: "Choose valid Zillow properties." });
+    }
+    return response(200, { status: "available", comparisons: await repository.findSavedComparisons(body.listingUrls) });
   };
 }
 
@@ -75,6 +101,8 @@ export function toPublicComparison(stored: StoredComparison) {
       rateMinimumUsd: item.rateMinimumUsd, rateMaximumUsd: item.rateMaximumUsd,
       rateObservationCount: item.rateObservationCount, calendarUnavailablePercentage: item.calendarUnavailablePercentage,
       calendarUnavailableNights: item.calendarUnavailableNights, calendarObservationCount: item.calendarObservationCount,
+      calendarWindows: item.calendarWindows,
+      calendarObservedAt: item.calendarObservedAt,
     })),
   };
 }

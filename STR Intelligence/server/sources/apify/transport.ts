@@ -51,6 +51,7 @@ export class ApifyTransport {
   readonly sourceIdentity;
   private client?: ApifyClient;
   private actorId?: string;
+  private readonly detailActorId: string;
   private readonly resultLimits = new Map<string, number>();
   private readonly queryFilters = new Map<string, ListingSearchFilters>();
 
@@ -59,10 +60,12 @@ export class ApifyTransport {
   constructor(options?: {
     client?: ApifyClient;
     actorId?: string;
+    detailActorId?: string;
     source?: "zillow_existing_home" | "zillow_land";
   }) {
     this.client = options?.client;
     this.actorId = options?.actorId;
+    this.detailActorId = options?.detailActorId ?? "automation-lab/zillow-scraper";
     this.source = options?.source ?? "zillow_existing_home";
     this.sourceIdentity = this.source === "zillow_land"
       ? { key: "apify_zillow_land", name: "Apify Zillow Land Listings", kind: "land_parcel" }
@@ -75,11 +78,15 @@ export class ApifyTransport {
     if (!location) throw new Error(`Unsupported Apify market: ${query.location}`);
     const { client, actorId } = this.liveConfiguration();
     const resultLimit = Math.min(query.recordLimit, 5);
-    const run = await client.actor(actorId).start({
-      searchUrls: [{ url: buildZillowSearchUrl(query.lookbackDays, this.source, location, query.filters) }],
-      extractionMethod: "MAP_MARKERS",
-      resultsLimit: resultLimit,
-    }, {
+    const isDirectListing = this.source === "zillow_existing_home" && Boolean(query.listingUrl);
+    const actorInput = isDirectListing
+      ? { propertyUrls: [query.listingUrl!], maxListings: 1, includeDetails: true, listingType: "for_sale" }
+      : {
+          searchUrls: [{ url: buildZillowSearchUrl(query.lookbackDays, this.source, location, query.filters) }],
+          extractionMethod: "MAP_MARKERS",
+          resultsLimit: resultLimit,
+        };
+    const run = await client.actor(isDirectListing ? this.detailActorId : actorId).start(actorInput, {
       // Apify's run-level charged-results cap is separate from the Actor input limit.
       maxItems: resultLimit,
     });
@@ -140,12 +147,13 @@ export function mapApifyZillowRecord(
   source: "zillow_existing_home" | "zillow_land" = "zillow_existing_home",
 ): NormalizedSourceRecordUnion {
   const externalId = text(record.zpid ?? record.id);
-  const url = text(record.detailUrl ?? record.url);
+  const url = text(record.detailUrl ?? record.propertyUrl ?? record.url ?? record.addressOrUrlFromInput);
   if (!externalId || !url) {
     return { kind: "provider_error", source, message: "Provider listing missing required fields", raw: record };
   }
 
-  const address = text(record.address ?? record.streetAddress);
+  const listingAddress = object(record.listingAddress);
+  const address = text(record.address ?? record.streetAddress ?? listingAddress.full ?? listingAddress.street);
   const addressParts = address?.match(/,\s*([^,]+),\s*([A-Z]{2})\s+(\d{5})/);
   const propertyType = text(record.homeType ?? record.propertyType);
   // Provider-side filtering can drift; fail closed before a residential record
@@ -161,10 +169,11 @@ export function mapApifyZillowRecord(
     discoveredAt: new Date().toISOString(),
     title: address,
     address,
-    city: text(record.addressCity ?? record.city) ?? addressParts?.[1],
-    state: text(record.addressState ?? record.state) ?? addressParts?.[2],
-    postalCode: text(record.addressZipcode ?? record.zipcode ?? record.zip) ?? addressParts?.[3],
-    price: number(record.price ?? record.unformattedPrice),
+    city: text(record.addressCity ?? record.city ?? listingAddress.city) ?? addressParts?.[1],
+    county: text(record.county ?? listingAddress.county),
+    state: text(record.addressState ?? record.state ?? listingAddress.state) ?? addressParts?.[2],
+    postalCode: text(record.addressZipcode ?? record.zipcode ?? record.zip ?? listingAddress.zipCode) ?? addressParts?.[3],
+    price: number(record.price ?? record.unformattedPrice ?? object(record.listingPrice).amount),
     beds: number(record.bedrooms ?? record.beds),
     baths: number(record.bathrooms ?? record.baths),
     sqft: number(record.livingArea ?? record.livingAreaValue ?? record.sqft),
@@ -175,7 +184,8 @@ export function mapApifyZillowRecord(
     longitude: coordinate(record, "longitude"),
     propertyType,
     zoningText: text(record.zoningText ?? record.zoning ?? record.zoningDescription),
-    statusText: text(record.homeStatus ?? record.statusText),
+    statusText: text(record.homeStatus ?? record.statusText ?? record.listingStatus),
+    description: text(record.description),
     raw: record,
   };
 }
@@ -196,10 +206,14 @@ function coordinate(record: Record<string, unknown>, axis: "latitude" | "longitu
 }
 function object(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function primaryImage(record: Record<string, unknown>) {
-  const direct = text(record.imgSrc ?? record.imageUrl);
+  const mainImage = object(record.mainImage);
+  const direct = text(record.imgSrc ?? record.imageUrl ?? mainImage.hiRes ?? mainImage.medium ?? mainImage.thumbnail);
   if (direct) return direct;
   const photos = record.carouselPhotos;
-  if (!Array.isArray(photos)) return undefined;
+  if (!Array.isArray(photos)) {
+    const detailPhotos = record.photos;
+    return Array.isArray(detailPhotos) ? text(detailPhotos[0]) : undefined;
+  }
   const first = photos[0];
   return first && typeof first === "object" ? text((first as Record<string, unknown>).url) : undefined;
 }
@@ -218,8 +232,9 @@ function lotArea(record: Record<string, unknown>) {
     ? (record.hdpData as Record<string, unknown>).homeInfo
     : undefined;
   const nested = homeInfo && typeof homeInfo === "object" ? homeInfo as Record<string, unknown> : {};
+  const detailLotArea = object(record.lotArea);
   return {
-    value: number(record.lotAreaValue ?? nested.lotAreaValue ?? record.lotSize ?? record.lotSqft),
-    unit: text(record.lotAreaUnit ?? nested.lotAreaUnit)?.toLowerCase(),
+    value: number(record.lotAreaValue ?? nested.lotAreaValue ?? detailLotArea.value ?? record.lotSize ?? record.lotSqft),
+    unit: text(record.lotAreaUnit ?? nested.lotAreaUnit ?? detailLotArea.unit)?.toLowerCase(),
   };
 }

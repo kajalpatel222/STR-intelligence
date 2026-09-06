@@ -6,6 +6,9 @@ import { StrComparatorWorkspace } from "./StrComparatorWorkspace.js";
 import {
   analyzeStrComparableEvidence,
   discoverStrComparables,
+  loadSavedStrComparison,
+  loadSavedStrComparisonLinks,
+  refreshStrComparableCalendar,
   updateStrComparableSelections,
   type StrComparableDto,
   type StrComparisonDto,
@@ -53,6 +56,7 @@ const comparison = (withEvidence = false): StrComparisonDto => ({
     calendarUnavailablePercentage: 62 + index,
     calendarUnavailableNights: 38 + index,
     calendarObservationCount: 90,
+    calendarWindows: [{ days: 15, unavailablePercentage: 40 + index, unavailableNights: 6, observationCount: 15 }],
   } : {})),
   ...(withEvidence ? { summary: {
     reasonText: "Five comparables ranked with complete rate and calendar evidence.",
@@ -90,7 +94,6 @@ test("renders only five concise linked comparable cards", () => {
   assert.match(markup, /\/night/);
   assert.equal(markup.includes("Price shown during the comparable search"), false);
   assert.equal(markup.includes("2026-09-10 to 2026-09-12"), false);
-  assert.match(markup, /Distance/);
   assert.match(markup, /Guests/);
   assert.match(markup, /Rating/);
   assert.match(markup, /<details/);
@@ -110,7 +113,8 @@ test("shows only the concise booking metric while keeping detailed evidence and 
   }));
   assert.match(markup, /Current rate/);
   assert.match(markup, /Booked or blocked/);
-  assert.match(markup, /Based on 90 observed calendar nights/);
+  assert.match(markup, /checked="" value="15"/);
+  assert.match(markup, /Based on 15 nights/);
   assert.equal(markup.includes("Availability summary"), false);
   assert.equal(markup.includes("Comparator summary"), false);
   assert.equal(markup.includes("Evidence confidence"), false);
@@ -123,13 +127,13 @@ test("omits the booking metric when the calendar count is unavailable", () => {
   const value = comparison(true);
   const markup = renderToStaticMarkup(createElement(StrComparatorWorkspace, {
     listingUrl: "https://example.com/target",
-    initialComparison: { ...value, candidates: [{ ...value.candidates[0]!, calendarObservationCount: undefined }] },
+    initialComparison: { ...value, candidates: [{ ...value.candidates[0]!, calendarObservationCount: undefined, calendarWindows: undefined }] },
     onBack: () => undefined,
   }));
   assert.equal(markup.includes("Booked or blocked"), false);
 });
 
-test("shows Superhost separately and suppresses an implausible cached distance", () => {
+test("shows Superhost separately and omits distance from the compact facts", () => {
   const value = comparison();
   const markup = renderToStaticMarkup(createElement(StrComparatorWorkspace, {
     listingUrl: "https://example.com/target",
@@ -137,7 +141,7 @@ test("shows Superhost separately and suppresses an implausible cached distance",
     onBack: () => undefined,
   }));
   assert.match(markup, /Superhost/);
-  assert.match(markup, /Distance<\/dt><dd>Unavailable/);
+  assert.equal(markup.includes("Distance</dt>"), false);
   assert.equal(markup.includes("7,818.1 mi"), false);
 });
 
@@ -159,16 +163,19 @@ test("typed client sends stage-specific payloads without external calls", async 
   await discoverStrComparables("https://example.com/target", fakeFetch);
   await analyzeStrComparableEvidence("cmp_public_123", ["https://example.com/rooms/1"], fakeFetch);
   await updateStrComparableSelections("cmp_public_123", ["https://example.com/rooms/1"], fakeFetch);
+  await refreshStrComparableCalendar("cmp_public_123", "https://example.com/rooms/1", fakeFetch);
   assert.deepEqual(calls.map((call) => call.url), [
     "/api/str-comparisons",
     "/api/str-comparisons/cmp_public_123/evidence",
     "/api/str-comparisons/cmp_public_123/selections",
+    "/api/refresh-str-calendar",
   ]);
   assert.deepEqual(JSON.parse(String(calls[0]!.init!.body)), { listingUrl: "https://example.com/target" });
   assert.deepEqual(JSON.parse(String(calls[1]!.init!.body)), {
     listingUrls: ["https://example.com/rooms/1"],
   });
   assert.equal(calls[2]!.init!.method, "PUT");
+  assert.deepEqual(JSON.parse(String(calls[3]!.init!.body)), { reference: "cmp_public_123", listingUrl: "https://example.com/rooms/1" });
 });
 
 test("normalizes the richer server response into the local UI DTO", async () => {
@@ -193,4 +200,18 @@ test("typed client surfaces server errors and rejects incomplete success respons
   await assert.rejects(discoverStrComparables("target", failedFetch), /Provider timed out/);
   const incompleteFetch = async () => new Response(JSON.stringify({ status: "complete" }), { status: 200 });
   await assert.rejects(discoverStrComparables("target", incompleteFetch), /incomplete response/);
+});
+
+test("loads saved comparison links and an existing comparison without discovery", async () => {
+  const calls: string[] = [];
+  const listingUrl = "https://www.zillow.com/homedetails/123";
+  const fakeFetch = async (input: URL | RequestInfo) => {
+    calls.push(String(input));
+    return String(input) === "/api/str-comparison-links"
+      ? new Response(JSON.stringify({ comparisons: { [listingUrl]: "cmp_public_123" } }), { status: 200 })
+      : new Response(JSON.stringify({ comparison: comparison() }), { status: 200 });
+  };
+  assert.deepEqual(await loadSavedStrComparisonLinks([listingUrl], fakeFetch), { [listingUrl]: "cmp_public_123" });
+  assert.equal((await loadSavedStrComparison("cmp_public_123", fakeFetch)).publicReference, comparison().publicReference);
+  assert.deepEqual(calls, ["/api/str-comparison-links", "/api/saved-str-comparison"]);
 });

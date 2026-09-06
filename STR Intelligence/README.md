@@ -2,12 +2,14 @@
 
 STR Intelligence is an agentic short-term-rental investment assistant created to reduce the manual work of moving between Zillow, Airbnb, and spreadsheets. It combines conversational property discovery, deterministic screening, cached STR comparisons, financial analysis, and on-demand multimodal STR-potential evaluation in one stateful workflow.
 
+Users can either describe a market search or submit a Zillow home-details URL. A submitted home is enriched and saved through the same ingestion path, keeping attention screening, nearby STR comparison, and financial analysis available without duplicating those workflows.
+
 ## Architecture
 
 - **React + Vite + TypeScript** provides the natural-language property search, ranked listing cards, STR library, and financial dashboard.
 - **Node.js** validates browser requests and keeps provider and database credentials server-side.
 - **LangGraph + LangChain tools** route deterministic ingestion, retrieval-first STR comparison, and an on-demand multimodal STR-potential evaluation.
-- **Apify** runs the configured Zillow Search Actor with source-specific filters and a five-record maximum.
+- **Apify** runs the configured Zillow Search Actor with source-specific filters and a five-record maximum, or a one-record direct-property Actor for a user-submitted home URL.
 - **OpenRouter** provides the server-side multimodal model used only when a user explicitly evaluates a saved property's STR potential.
 - **Supabase/PostgreSQL** stores markets, source runs, canonical homes/parcels, source mappings, and immutable listing snapshots.
 
@@ -30,13 +32,14 @@ Environment variable names:
 - `OPENROUTER_API_KEY`
 - `OPENROUTER_BASE_URL`
 - `OPENROUTER_MODEL`
+- `AIRBTICS_API_KEY`
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `VITE_APP_NAME`
 - `VITE_DEFAULT_LOOKBACK_DAYS`
 - `VITE_MAX_LOOKBACK_DAYS`
 
-`APIFY_API_TOKEN`, `APIFY_ZILLOW_ACTOR_ID`, `SUPABASE_SERVICE_ROLE_KEY`, and `OPENROUTER_API_KEY` are server-only. Never prefix secrets with `VITE_`.
+`APIFY_API_TOKEN`, `APIFY_ZILLOW_ACTOR_ID`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`, and `AIRBTICS_API_KEY` are server-only. Never prefix secrets with `VITE_`.
 
 ## Run Locally
 
@@ -53,6 +56,16 @@ npm run dev
 ```
 
 Vite proxies `/api` to the Node API at `http://127.0.0.1:8787`.
+
+## Deploy to Vercel
+
+The Vite frontend and Node API deploy together as one Vercel project. The catch-all function under `api/` reuses the same request handler as local development; Supabase, Apify, and OpenRouter credentials remain server-side.
+
+1. Import the GitHub repository into Vercel or run `vercel` from the project root.
+2. Add the variables listed in **Setup** to the Vercel project for Production and Preview. Use the local `.env` values, but never commit or expose them in browser code.
+3. Deploy. Vercel runs `npm run build`, publishes `dist`, and routes `/api/*` to the Node function.
+
+Provider-backed requests are capped at five minutes to fit the Vercel Hobby Fluid Compute limit. If a provider exceeds that window, retry rather than increasing the browser-visible timeout.
 
 ## Current Behavior
 
@@ -73,6 +86,7 @@ Vite proxies `/api` to the Node API at `http://127.0.0.1:8787`.
 - Comparator evidence remains fresh for seven days. If refresh collection fails, the graph returns the latest stored comparison when one exists instead of discarding useful evidence.
 - The read-only **STR Library** aggregates unique saved Airbnb comparables across Zillow properties and sorts them by recent observation, rating, closest recorded distance, or highest booked-or-blocked signal without calling Apify.
 - **Phase 6.2 financial workspace:** each priced Home result can open an editable base-case analysis prefilled with its Zillow asking price. The workspace uses the shared [365-day calculator](docs/financial-calculator-methodology.md) to show cash flow, cash-on-cash return, cap rate, DSCR, break-even occupancy, and transparent calculation details. Property tax is estimated from purchase price and an editable planning rate, while insurance and miscellaneous utilities remain explicit assumptions. Guest-paid cleaning fees, an editable 15% platform-fee default, county-prefilled transient occupancy tax, and an estimated all-in nightly total are shown separately from owner operating expenses. **Save to dashboard** creates an immutable, server-calculated Supabase version; the Financial Dashboard shows the latest version per Home and defaults to highest cash-on-cash return. It does not infer ADR/occupancy from comparator evidence.
+- **Optional STR revenue estimate:** Financial Analysis checks Supabase for a saved Airbtics summary without charge. A new report runs only after the user confirms the displayed `$0.10` cost, and the resulting ADR, occupancy, and annual gross-revenue estimate is stored immutably for reuse. Applying ADR and occupancy updates editable assumptions and runs only the local deterministic calculator.
 - **Phase 7 STR potential:** the Financial Dashboard exposes an explicit **Evaluate STR potential** action. The [conditional evaluation workflow](docs/str-potential-evaluation.md) checks saved evidence first, evaluates listing facts, text, multiple photos, and comparable characteristics only on demand, then stores an immutable result with strengths, risks, missing evidence, improvement ideas, and rough cost ranges.
 - Comparable cards show the current observed nightly rate and a concise **Booked or blocked** percentage based on the actual number of calendar nights observed for that listing. This signal is not presented as occupancy.
 - Detailed ADR, selection controls, evidence summaries, and calendar actions are deferred to a broader stored-data analysis workspace.
@@ -90,6 +104,7 @@ npm run test:api
 npm run test:graph
 npm run test:comparator
 npm run test:str-potential
+npm run test:revenue-estimate
 npm run server:check
 npm run check
 npm run build

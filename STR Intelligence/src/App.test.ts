@@ -80,13 +80,16 @@ test("offers financial analysis only when a listing has a usable purchase price"
 
 test("renders one prominent natural-language property search without duplicate controls", () => {
   const markup = renderToStaticMarkup(createElement(App));
-  assert.equal((markup.match(/<input/g) ?? []).length, 1);
+  assert.equal((markup.match(/<input/g) ?? []).length, 2);
   assert.match(markup, /Find your next STR investment/);
   assert.match(markup, /3\+ bedroom homes under \$350k in Oakhurst/);
   assert.equal(markup.includes("Property type"), false);
   assert.equal(markup.includes("Search location"), false);
   assert.equal(markup.includes("No properties to show yet"), false);
   for (const query of QUICK_SEARCHES) assert.equal(markup.includes(query), true);
+  assert.match(markup, /Already have a listing in mind/);
+  assert.match(markup, /Share its Zillow URL/);
+  assert.match(markup, /Review listing/);
 });
 
 test("renders concise parsed feedback for a supported search", () => {

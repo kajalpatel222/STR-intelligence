@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   cacheDir: "/private/tmp/str-intelligence-week-3-vite-cache",
   build: {
-    outDir: "/private/tmp/str-intelligence-week-3-dist",
+    outDir: "dist",
   },
   plugins: [react()],
   server: {

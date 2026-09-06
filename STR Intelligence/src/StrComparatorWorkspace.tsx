@@ -93,7 +93,7 @@ export function StrComparatorWorkspace({
           <span>Try discovery again later as nearby listing inventory changes.</span>
           <button type="button" style={styles.secondaryButton} onClick={discover} disabled={activity !== "idle"}>Run discovery again</button>
         </div> : <div style={styles.grid}>
-          {comparison.candidates.slice(0, 5).map((candidate, index) => <StrComparableCard key={candidate.providerListingKey ?? candidate.listingUrl} candidate={candidate} rank={index + 1} />)}
+          {comparison.candidates.slice(0, 5).map((candidate, index) => <StrComparableCard key={candidate.providerListingKey ?? candidate.listingUrl} candidate={candidate} rank={index + 1} onRefreshCalendar={async () => setComparison(await client.refreshCalendar(comparison.publicReference, candidate.listingUrl))} />)}
         </div>}
       </>}
     </main>

@@ -84,10 +84,20 @@ export interface StrComparisonRepositoryPort {
 
 export type StoredComparableLibraryItem = Readonly<{
   comparable: StoredComparison["candidates"][number];
+  comparisonReference: string;
   associatedPropertyCount: number;
-  associatedProperties: readonly string[];
+  associatedProperties: readonly Readonly<{ listingUrl: string; address: string; imageUrl?: string }>[];
   firstObservedAt: string;
   latestObservedAt: string;
+}>;
+
+export const CALENDAR_WINDOW_DAYS = [15, 30, 45, 60, 90] as const;
+export type CalendarWindowDays = typeof CALENDAR_WINDOW_DAYS[number];
+export type CalendarWindowMetric = Readonly<{
+  days: CalendarWindowDays;
+  unavailablePercentage: number;
+  unavailableNights: number;
+  observationCount: number;
 }>;
 
 export type StoredComparison = Readonly<{
@@ -106,6 +116,8 @@ export type StoredComparison = Readonly<{
     calendarUnavailablePercentage?: number;
     calendarUnavailableNights?: number;
     calendarObservationCount?: number;
+    calendarWindows?: readonly CalendarWindowMetric[];
+    calendarObservedAt?: string;
   }>)[];
 }>;
 
@@ -153,6 +165,28 @@ export class StrComparisonRepository implements StrComparisonRepositoryPort {
       completedAt: optionalText(data.completed_at),
       expiresAt,
     });
+  }
+
+  async findSavedComparisons(listingUrls: readonly string[]): Promise<Readonly<Record<string, string>>> {
+    if (!listingUrls.length) return Object.freeze({});
+    const { data: mappings, error: mappingError } = await this.client.from("property_source_ids")
+      .select("canonical_property_id,external_url").in("external_url", [...listingUrls]);
+    if (mappingError) throw new Error("Unable to resolve saved property comparisons.");
+    const propertyIds = [...new Set((mappings ?? []).map((row) => String(row.canonical_property_id)))];
+    if (!propertyIds.length) return Object.freeze({});
+    const { data: runs, error: runError } = await this.client.from("str_comparison_runs")
+      .select("canonical_property_id,public_reference,completed_at").in("canonical_property_id", propertyIds)
+      .in("status", ["discovered", "enriched", "partial"]).order("completed_at", { ascending: false });
+    if (runError) throw new Error("Unable to load saved property comparisons.");
+    const referenceByProperty = new Map<string, string>();
+    for (const run of runs ?? []) {
+      const propertyId = String(run.canonical_property_id);
+      if (!referenceByProperty.has(propertyId)) referenceByProperty.set(propertyId, String(run.public_reference));
+    }
+    return Object.freeze(Object.fromEntries((mappings ?? []).flatMap((mapping) => {
+      const reference = referenceByProperty.get(String(mapping.canonical_property_id));
+      return reference && mapping.external_url ? [[String(mapping.external_url), reference]] : [];
+    })));
   }
 
   async createRun(params: { target: ComparatorTargetRecord; publicReference: string; cacheKey: string; request: unknown }): Promise<string> {
@@ -241,7 +275,7 @@ export class StrComparisonRepository implements StrComparisonRepositoryPort {
     const targetMapping = await this.client.from("property_source_ids").select("external_url").eq("canonical_property_id", run.canonical_property_id).limit(1).maybeSingle();
     const target = targetMapping.data?.external_url ? await this.resolveTarget(String(targetMapping.data.external_url)) : undefined;
     if (!target) return undefined;
-    const { data: rows, error: rowsError } = await this.client.from("str_comparison_candidates").select("*,str_comparable_selections(included),str_rate_observations(nightly_rate_usd,observed_at),str_calendar_snapshots(available_nights,unavailable_nights,unknown_nights,unavailability_rate,observed_at)").eq("comparison_run_id", run.id).order("similarity_score", { ascending: false });
+    const { data: rows, error: rowsError } = await this.client.from("str_comparison_candidates").select("*,str_comparable_selections(included),str_rate_observations(nightly_rate_usd,observed_at),str_calendar_snapshots(available_nights,unavailable_nights,unknown_nights,unavailability_rate,daily_observations,observed_at)").eq("comparison_run_id", run.id).order("similarity_score", { ascending: false });
     if (rowsError) throw new Error("Unable to load comparable evidence.");
     const targetCoordinates = { latitude: target.latitude, longitude: target.longitude };
     const candidates = (rows ?? []).map(rowToStoredComparable).map((candidate) => Object.freeze({
@@ -254,11 +288,31 @@ export class StrComparisonRepository implements StrComparisonRepositoryPort {
   async listComparableLibrary(limit = 200): Promise<readonly StoredComparableLibraryItem[]> {
     const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 500);
     const { data, error } = await this.client.from("str_comparison_candidates")
-      .select("*,comparison_run:str_comparison_runs!str_comparison_candidates_comparison_run_id_fkey!inner(status,canonical_property_id,canonical_properties(address_line1,city,state)),str_rate_observations(nightly_rate_usd,observed_at),str_calendar_snapshots(available_nights,unavailable_nights,unknown_nights,unavailability_rate,observed_at)")
+      .select("*,comparison_run:str_comparison_runs!str_comparison_candidates_comparison_run_id_fkey!inner(status,canonical_property_id,public_reference,canonical_properties(address_line1,city,state)),str_rate_observations(nightly_rate_usd,observed_at),str_calendar_snapshots(available_nights,unavailable_nights,unknown_nights,unavailability_rate,daily_observations,observed_at)")
       .in("comparison_run.status", ["discovered", "enriched", "partial"])
       .order("observed_at", { ascending: false })
       .limit(boundedLimit);
     if (error) throw new Error("Unable to load the STR comparable library.");
+
+    const propertyIds = [...new Set((data ?? []).flatMap((row) => {
+      const propertyId = optionalText(firstRecord(row.comparison_run).canonical_property_id);
+      return propertyId ? [propertyId] : [];
+    }))];
+    const snapshotsByProperty = new Map<string, { listingUrl: string; imageUrl?: string }>();
+    if (propertyIds.length) {
+      const { data: snapshots, error: snapshotError } = await this.client.from("listing_snapshots")
+        .select("canonical_property_id,listing_url,raw_payload,observed_at")
+        .in("canonical_property_id", propertyIds)
+        .order("observed_at", { ascending: false });
+      if (snapshotError) throw new Error("Unable to load associated Zillow properties.");
+      for (const snapshot of snapshots ?? []) {
+        const propertyId = optionalText(snapshot.canonical_property_id);
+        const listingUrl = optionalText(snapshot.listing_url);
+        if (!propertyId || !listingUrl || snapshotsByProperty.has(propertyId)) continue;
+        const raw = asRecord(snapshot.raw_payload);
+        snapshotsByProperty.set(propertyId, { listingUrl, imageUrl: optionalText(raw.imgSrc ?? raw.imageUrl) });
+      }
+    }
 
     const grouped = new Map<string, Record<string, any>[]>();
     for (const row of data ?? []) {
@@ -271,23 +325,35 @@ export class StrComparisonRepository implements StrComparisonRepositoryPort {
       const latest = rows[0]!;
       const comparable = rowToStoredComparable(latest);
       const closestDistance = Math.min(...rows.map((row) => optionalNumber(row.distance_miles)).filter((value): value is number => value !== undefined && value >= 0));
-      const propertyLabels = new Map<string, string>();
+      const associatedProperties = new Map<string, { listingUrl: string; address: string; imageUrl?: string }>();
       for (const row of rows) {
         const run = firstRecord(row.comparison_run);
-        const property = firstRecord(run.canonical_properties);
         const propertyId = optionalText(run.canonical_property_id);
-        if (propertyId) propertyLabels.set(propertyId, [optionalText(property.address_line1), optionalText(property.city), optionalText(property.state)].filter(Boolean).join(", ") || "Associated Zillow property");
+        const snapshot = propertyId ? snapshotsByProperty.get(propertyId) : undefined;
+        const property = firstRecord(run.canonical_properties);
+        const address = formatAssociatedPropertyAddress(property);
+        if (propertyId && snapshot) associatedProperties.set(propertyId, { ...snapshot, address: address || "Zillow property" });
       }
       const observed = rows.map((row) => optionalText(row.observed_at)).filter((value): value is string => Boolean(value)).sort();
       return Object.freeze({
         comparable: Object.freeze({ ...comparable, distanceMiles: Number.isFinite(closestDistance) ? closestDistance : comparable.distanceMiles }),
-        associatedPropertyCount: propertyLabels.size,
-        associatedProperties: Object.freeze([...propertyLabels.values()]),
+        comparisonReference: optionalText(firstRecord(latest.comparison_run).public_reference) ?? "",
+        associatedPropertyCount: associatedProperties.size,
+        associatedProperties: Object.freeze([...associatedProperties.values()].map((property) => Object.freeze(property))),
         firstObservedAt: observed[0] ?? comparable.observedAt,
-        latestObservedAt: observed.at(-1) ?? comparable.observedAt,
+        latestObservedAt: observed[observed.length - 1] ?? comparable.observedAt,
       });
     }).sort((left, right) => right.latestObservedAt.localeCompare(left.latestObservedAt)));
   }
+}
+
+function formatAssociatedPropertyAddress(property: Record<string, any>) {
+  const line = optionalText(property.address_line1);
+  const city = optionalText(property.city);
+  const state = optionalText(property.state);
+  if (!line) return [city, state].filter(Boolean).join(", ");
+  if (city && line.toLocaleLowerCase().includes(city.toLocaleLowerCase())) return line;
+  return [line, city, state].filter(Boolean).join(", ");
 }
 
 export function rowToStoredComparable(row: Record<string, any>): StoredComparison["candidates"][number] {
@@ -300,7 +366,24 @@ export function rowToStoredComparable(row: Record<string, any>): StoredCompariso
   const calendarObservationCount = [availableNights, unavailableNights, unknownNights].every((value) => value !== undefined)
     ? availableNights! + unavailableNights! + unknownNights!
     : undefined;
-  return Object.freeze({ providerListingKey: String(row.provider_listing_key), listingUrl: String(row.listing_url), title: optionalText(row.title), imageUrl: optionalText(row.image_url), latitude: Number(row.latitude), longitude: Number(row.longitude), distanceMiles: Number(row.distance_miles), propertyType: optionalText(row.property_type), roomType: optionalText(row.room_type), bedrooms: optionalNumber(row.bedrooms), bathrooms: optionalNumber(row.bathrooms), guestCapacity: optionalNumber(row.guest_capacity), rating: optionalNumber(row.rating), reviewCount: optionalNumber(row.review_count), isSuperhost: typeof row.is_superhost === "boolean" ? row.is_superhost : undefined, amenities: Object.freeze(Array.isArray(row.amenities) ? row.amenities.filter((item: unknown): item is string => typeof item === "string") : []), observedNightlyPriceUsd: Number(row.observed_nightly_price_usd), observedCheckIn: String(row.observed_check_in), observedCheckOut: String(row.observed_check_out), similarityScore: Number(row.similarity_score), matchReasons: Object.freeze(Array.isArray(row.match_reasons) ? row.match_reasons.filter((item: unknown): item is string => typeof item === "string") : []), observedAt: String(row.observed_at), rawPayload: row.raw_payload, included: row.str_comparable_selections?.[0]?.included !== false, estimatedAdrUsd: rates.length ? mean(rates) : undefined, rateMinimumUsd: rates.length ? Math.min(...rates) : undefined, rateMaximumUsd: rates.length ? Math.max(...rates) : undefined, rateObservationCount: rates.length, calendarUnavailablePercentage: optionalNumber(calendar?.unavailability_rate) !== undefined ? optionalNumber(calendar.unavailability_rate)! * 100 : undefined, calendarUnavailableNights: unavailableNights, calendarObservationCount });
+  const calendarWindows = calculateCalendarWindows(calendar?.daily_observations, optionalText(calendar?.observed_at));
+  return Object.freeze({ providerListingKey: String(row.provider_listing_key), listingUrl: String(row.listing_url), title: optionalText(row.title), imageUrl: optionalText(row.image_url), latitude: Number(row.latitude), longitude: Number(row.longitude), distanceMiles: Number(row.distance_miles), propertyType: optionalText(row.property_type), roomType: optionalText(row.room_type), bedrooms: optionalNumber(row.bedrooms), bathrooms: optionalNumber(row.bathrooms), guestCapacity: optionalNumber(row.guest_capacity), rating: optionalNumber(row.rating), reviewCount: optionalNumber(row.review_count), isSuperhost: typeof row.is_superhost === "boolean" ? row.is_superhost : undefined, amenities: Object.freeze(Array.isArray(row.amenities) ? row.amenities.filter((item: unknown): item is string => typeof item === "string") : []), observedNightlyPriceUsd: Number(row.observed_nightly_price_usd), observedCheckIn: String(row.observed_check_in), observedCheckOut: String(row.observed_check_out), similarityScore: Number(row.similarity_score), matchReasons: Object.freeze(Array.isArray(row.match_reasons) ? row.match_reasons.filter((item: unknown): item is string => typeof item === "string") : []), observedAt: String(row.observed_at), rawPayload: row.raw_payload, included: row.str_comparable_selections?.[0]?.included !== false, estimatedAdrUsd: rates.length ? mean(rates) : undefined, rateMinimumUsd: rates.length ? Math.min(...rates) : undefined, rateMaximumUsd: rates.length ? Math.max(...rates) : undefined, rateObservationCount: rates.length, calendarUnavailablePercentage: optionalNumber(calendar?.unavailability_rate) !== undefined ? optionalNumber(calendar.unavailability_rate)! * 100 : undefined, calendarUnavailableNights: unavailableNights, calendarObservationCount, calendarWindows, calendarObservedAt: optionalText(calendar?.observed_at) });
+}
+
+export function calculateCalendarWindows(value: unknown, observedAt?: string): readonly CalendarWindowMetric[] {
+  const firstEligibleDate = observedAt?.slice(0, 10);
+  const observations = (Array.isArray(value) ? value : []).flatMap((item) => {
+    const record = asRecord(item);
+    return typeof record.date === "string" && typeof record.available === "boolean"
+      ? [{ date: record.date, available: record.available }]
+      : [];
+  }).filter((item) => !firstEligibleDate || item.date >= firstEligibleDate)
+    .sort((left, right) => left.date.localeCompare(right.date));
+  return Object.freeze(CALENDAR_WINDOW_DAYS.flatMap((days) => {
+    if (observations.length < days) return [];
+    const unavailableNights = observations.slice(0, days).filter((item) => !item.available).length;
+    return [Object.freeze({ days, unavailableNights, observationCount: days, unavailablePercentage: Math.round(unavailableNights / days * 1000) / 10 })];
+  }));
 }
 function asRecord(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function firstRecord(value: unknown): Record<string, unknown> { return Array.isArray(value) ? asRecord(value[0]) : asRecord(value); }

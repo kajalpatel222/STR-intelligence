@@ -40,10 +40,13 @@ function toPublicLibraryItem(item: StoredComparableLibraryItem) {
     matchReasons: comparable.matchReasons,
     calendarUnavailablePercentage: comparable.calendarUnavailablePercentage,
     calendarUnavailableNights: comparable.calendarUnavailableNights,
+    calendarWindows: comparable.calendarWindows,
+    calendarObservedAt: comparable.calendarObservedAt,
     calendarObservationCount: comparable.calendarObservationCount,
     associatedPropertyCount: item.associatedPropertyCount,
-    associatedProperties: item.associatedProperties,
+    associatedProperties: item.associatedProperties.map((property) => ({ listingUrl: property.listingUrl, address: property.address })),
     firstObservedAt: item.firstObservedAt,
     latestObservedAt: item.latestObservedAt,
+    comparisonReference: item.comparisonReference,
   };
 }

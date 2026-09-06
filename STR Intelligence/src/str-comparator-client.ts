@@ -43,6 +43,16 @@ export type StrComparableDto = Readonly<{
   calendarUnavailablePercentage?: number;
   calendarUnavailableNights?: number;
   calendarObservationCount?: number;
+  calendarWindows?: readonly CalendarWindowMetricDto[];
+  calendarObservedAt?: string;
+}>;
+
+export type CalendarWindowDays = 15 | 30 | 45 | 60 | 90;
+export type CalendarWindowMetricDto = Readonly<{
+  days: CalendarWindowDays;
+  unavailablePercentage: number;
+  unavailableNights: number;
+  observationCount: number;
 }>;
 
 export type StrComparatorMarketDto = Readonly<{
@@ -71,6 +81,7 @@ export interface StrComparatorClient {
   discover(listingUrl: string): Promise<StrComparisonDto>;
   analyze(publicReference: string, listingUrls: readonly string[]): Promise<StrComparisonDto>;
   updateSelections(publicReference: string, listingUrls: readonly string[]): Promise<StrComparisonDto>;
+  refreshCalendar(publicReference: string, listingUrl: string): Promise<StrComparisonDto>;
 }
 
 type Fetcher = typeof fetch;
@@ -80,6 +91,20 @@ export async function discoverStrComparables(listingUrl: string, fetcher: Fetche
     method: "POST",
     body: JSON.stringify({ listingUrl }),
   }, fetcher, "Comparable discovery could not be completed.");
+}
+
+export async function loadSavedStrComparison(publicReference: string, fetcher: Fetcher = fetch): Promise<StrComparisonDto> {
+  return requestComparison("/api/saved-str-comparison", {
+    method: "POST",
+    body: JSON.stringify({ reference: publicReference }),
+  }, fetcher, "The saved comparison could not be loaded.");
+}
+
+export async function loadSavedStrComparisonLinks(listingUrls: readonly string[], fetcher: Fetcher = fetch): Promise<Readonly<Record<string, string>>> {
+  const response = await fetcher("/api/str-comparison-links", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ listingUrls }) });
+  const body = await response.json() as { comparisons?: unknown };
+  if (!response.ok || !body.comparisons || typeof body.comparisons !== "object" || Array.isArray(body.comparisons)) return Object.freeze({});
+  return Object.freeze(Object.fromEntries(Object.entries(body.comparisons as Record<string, unknown>).filter((entry): entry is [string, string] => typeof entry[1] === "string")));
 }
 
 export async function analyzeStrComparableEvidence(
@@ -97,10 +122,15 @@ export async function updateStrComparableSelections(publicReference: string, lis
   return requestComparison(`/api/str-comparisons/${encodeURIComponent(publicReference)}/selections`, { method: "PUT", body: JSON.stringify({ listingUrls }) }, fetcher, "Comparable selections could not be saved.");
 }
 
+export async function refreshStrComparableCalendar(publicReference: string, listingUrl: string, fetcher: Fetcher = fetch): Promise<StrComparisonDto> {
+  return requestComparison("/api/refresh-str-calendar", { method: "POST", body: JSON.stringify({ reference: publicReference, listingUrl }) }, fetcher, "Fresh calendar data could not be loaded.");
+}
+
 export const strComparatorClient: StrComparatorClient = Object.freeze({
   discover: discoverStrComparables,
   analyze: analyzeStrComparableEvidence,
   updateSelections: updateStrComparableSelections,
+  refreshCalendar: refreshStrComparableCalendar,
 });
 
 async function requestComparison(

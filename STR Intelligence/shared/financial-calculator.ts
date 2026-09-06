@@ -83,7 +83,7 @@ const AVAILABLE_NIGHTS = 365 as const;
 
 export function calculateBaseCaseFinancials(input: FinancialAssumptions): FinancialCalculationResult {
   const validation = validateFinancialAssumptions(input);
-  if (!validation.ok) throw new InvalidFinancialAssumptionsError(validation.errors);
+  if ("errors" in validation) throw new InvalidFinancialAssumptionsError(validation.errors);
 
   const assumptions = validation.value;
   const downPaymentRatio = assumptions.downPaymentPercent / 100;

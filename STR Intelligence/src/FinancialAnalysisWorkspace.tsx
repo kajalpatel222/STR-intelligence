@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { StrRevenueEstimatePanel } from "./StrRevenueEstimatePanel";
 import {
   type FinancialAssumptions,
   type FinancialAssumptionsField,
@@ -173,6 +174,11 @@ export function FinancialAnalysisWorkspace({
           {saveStatus === "error" && <small role="alert">Analysis could not be saved. Confirm the local API is running and try again.</small>}
         </div>
       </header>
+
+      {listing.sourceUrl && <StrRevenueEstimatePanel listingUrl={listing.sourceUrl} onUseEstimate={(estimate) => {
+        setDraft((current) => ({ ...current, expectedAdrUsd: String(Math.round(estimate.estimatedAdrUsd)), expectedOccupancyPercent: String(Math.round(estimate.estimatedOccupancyPercent * 10) / 10) }));
+        setSaveStatus("idle");
+      }} />}
 
       <section className="financial-summary" aria-labelledby="financial-summary-title">
         <div className="financial-section-heading">

@@ -13,6 +13,7 @@ export type ListingQuery = Readonly<{
   listingCategory?: string;
   homeType?: string;
   filters?: ListingSearchFilters;
+  listingUrl?: string;
 }>;
 
 export type SourceRunStatus = "pending" | "running" | "succeeded" | "failed" | "partial";

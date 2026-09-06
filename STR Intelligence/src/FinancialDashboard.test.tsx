@@ -51,10 +51,22 @@ test("defaults the dashboard to highest cash-on-cash return", () => {
 });
 
 test("renders a compact saved-property card with financial and on-demand STR actions", () => {
-  const markup = renderToStaticMarkup(createElement(FinancialDashboardCard, { analysis: analysis("1", { cashOnCash: 0.072, monthlyCashFlow: 840 }), onOpen: () => undefined, onEvaluate: () => undefined }));
-  for (const text of ["Cabin 1", "Cash-on-cash return", "7.2%", "$840 monthly cash flow", "Purchase price", "Total cash required", "Net operating income", "ADR / occupancy", "View financial analysis", "Evaluate STR potential"])
+  const markup = renderToStaticMarkup(createElement(FinancialDashboardCard, { analysis: analysis("1", { cashOnCash: 0.072, monthlyCashFlow: 840 }), onOpen: () => undefined, onEvaluate: () => undefined, onOpenComparison: () => undefined }));
+  for (const text of ["Cabin 1", "Cash-on-cash return", "7.2%", "$840 monthly cash flow", "Purchase price", "Total cash required", "Net operating income", "ADR / occupancy", "View financial analysis", "View nearby STRs", "Evaluate STR potential"])
     assert.equal(markup.includes(text), true, text);
   assert.match(markup, /alt="Property at 1 Pine Road"/);
+  assert.match(markup, /href="https:\/\/www\.zillow\.com\/homedetails\/1"/);
+});
+
+test("omits the saved-comparison action when the property has no comparison", () => {
+  const markup = renderToStaticMarkup(createElement(FinancialDashboardCard, { analysis: analysis("1"), onOpen: () => undefined }));
+  assert.equal(markup.includes("View nearby STRs"), false);
+});
+
+test("shows a concise error when a saved comparison cannot be opened", () => {
+  const markup = renderToStaticMarkup(createElement(FinancialDashboardCard, { analysis: analysis("1"), onOpen: () => undefined, onOpenComparison: () => undefined, comparisonError: true }));
+  assert.match(markup, /role="alert"/);
+  assert.match(markup, /Saved comparison could not be opened/);
 });
 
 test("renders the financial dashboard navigation and loading state accessibly", () => {

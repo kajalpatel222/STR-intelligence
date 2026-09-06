@@ -18,7 +18,7 @@ export function createFinancialAnalysesHandler(repository: FinancialAnalysisRepo
       const property = parseProperty(body.property);
       const validation = validateFinancialAssumptions(body.assumptions);
       if (!property) return invalid("Choose a valid Zillow property before saving the analysis.");
-      if (!validation.ok) return invalid(validation.errors[0]?.message ?? "Check the financial assumptions.");
+      if ("errors" in validation) return invalid(validation.errors[0]?.message ?? "Check the financial assumptions.");
       const request: SaveFinancialAnalysisRequest = Object.freeze({
         property,
         assumptions: validation.value,

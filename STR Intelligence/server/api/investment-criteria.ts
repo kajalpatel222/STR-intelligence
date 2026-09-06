@@ -9,7 +9,7 @@ export function createInvestmentCriteriaHandler(repository: InvestmentCriteriaRe
     async put(input: unknown) {
       const body = input && typeof input === "object" ? input as Record<string, unknown> : {};
       const validation = validateInvestmentCriteria(body.criteria);
-      if (!validation.ok) {
+      if ("errors" in validation) {
         return response(400, {
           status: "invalid",
           message: validation.errors[0]?.message ?? "Check the investment criteria values.",

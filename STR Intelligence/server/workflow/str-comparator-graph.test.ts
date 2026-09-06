@@ -92,7 +92,7 @@ test("sorts and deduplicates calendar dates before the 90-day signal", () => {
     { date: "2026-09-01", available: true, nightlyRate: 200 },
     { date: "2026-09-03", available: true, nightlyRate: 250 },
     { date: "not-a-date", available: false, nightlyRate: 999 },
-  ] })[0]!;
+  ], scrapedAt: "2026-09-01T12:00:00Z" })[0]!;
   assert.equal(evidence.calendar.windowStart, "2026-09-01");
   assert.equal(evidence.calendar.windowEnd, "2026-09-03");
   assert.equal(evidence.calendar.availableNights, 2);
@@ -103,7 +103,7 @@ test("persists selected calendar evidence without a manual decision gate", async
   const repository = new MemoryRepository();
   repository.loadComparison = async () => ({ publicReference: "4e14ec72-fdf3-45e7-8e5f-04835a476dde", status: "discovered", stage: "discovery", target: repository.target, candidates: repository.saved.map((item) => ({ ...item, included: true })) });
   repository.saved = [{ providerListingKey: "stay-1", listingUrl: "https://www.airbnb.com/rooms/1", latitude: 37.33, longitude: -119.65, distanceMiles: 1, bedrooms: 3, bathrooms: 2, guestCapacity: 6, amenities: [], observedNightlyPriceUsd: 200, observedCheckIn: "2026-09-11", observedCheckOut: "2026-09-13", similarityScore: 90, matchReasons: [], observedAt: "2026-08-30T00:00:00Z", rawPayload: {} }];
-  const source: StrComparatorProvider = { async discover() { return { records: [], errors: [] }; }, async collectCalendars() { return { records: [{ provider: "airbnb", listingId: "stay-1", days: [{ date: "2026-09-01", available: true, nightlyRate: 210 }] }], errors: [] }; } };
+  const source: StrComparatorProvider = { async discover() { return { records: [], errors: [] }; }, async collectCalendars() { return { records: [{ provider: "airbnb", listingId: "stay-1", days: [{ date: "2026-09-01", available: true, nightlyRate: 210 }], scrapedAt: "2026-09-01T12:00:00Z" }], errors: [] }; } };
   const result = await createStrComparatorGraph({ provider: source, repository }).invoke({ workflowState: initializeStrComparatorWorkflowState({ workflowId: "wf", intent: "enrich", listingUrl: target.listingUrl, comparisonReference: "4e14ec72-fdf3-45e7-8e5f-04835a476dde", selectedListingUrls: ["https://www.airbnb.com/rooms/1"] }) });
   assert.equal(result.workflowState.status, "completed");
   assert.equal(repository.evidence.length, 1);

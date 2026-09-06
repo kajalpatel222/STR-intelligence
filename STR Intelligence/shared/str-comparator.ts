@@ -94,7 +94,7 @@ export function validateComparatorRequest(input: unknown): ComparatorValidationR
 
 export function calculateComparatorSummary(input: unknown): ComparatorSummary {
   const validation = validateComparatorRequest(input);
-  if (!validation.ok) throw new TypeError(validation.errors.map(({ path, message }) => `${path}: ${message}`).join(" "));
+  if ("errors" in validation) throw new TypeError(validation.errors.map(({ path, message }) => `${path}: ${message}`).join(" "));
 
   const ranked = rankComparableCandidates(validation.value.target, validation.value.candidates, 5);
   const comparables = ranked.map(({ candidate, distanceKm, similarityScore }) => {

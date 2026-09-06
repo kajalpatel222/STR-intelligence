@@ -1,12 +1,23 @@
-import React from "react";
-import type { StrComparableDto } from "./str-comparator-client.js";
-import { formatBedroomBathroomCount, formatComparatorCurrency, formatComparatorDistance, formatComparatorPercent } from "./str-comparator-format.js";
+import React, { useState } from "react";
+import type { CalendarWindowDays, StrComparableDto } from "./str-comparator-client.js";
+import { formatBedroomBathroomCount, formatComparatorCurrency, formatComparatorDate, formatComparatorPercent } from "./str-comparator-format.js";
 
-export function StrComparableCard({ candidate, rank, context }: Readonly<{
+export function StrComparableCard({ candidate, rank, context, footer, onRefreshCalendar }: Readonly<{
   candidate: StrComparableDto;
   rank: number;
   context?: string;
+  footer?: React.ReactNode;
+  onRefreshCalendar?: () => Promise<void>;
 }>) {
+  const [calendarWindowDays, setCalendarWindowDays] = useState<CalendarWindowDays>(15);
+  const [refreshStatus, setRefreshStatus] = useState<"idle" | "refreshing" | "error">("idle");
+  const calendarMetric = candidate.calendarWindows?.find((item) => item.days === calendarWindowDays);
+  async function refreshCalendar(event: React.MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+    if (!onRefreshCalendar || refreshStatus === "refreshing") return;
+    setRefreshStatus("refreshing");
+    try { await onRefreshCalendar(); setRefreshStatus("idle"); } catch { setRefreshStatus("error"); }
+  }
   return <article className="str-comparator__comparable" onClick={(event) => openListingFromCard(event, candidate.listingUrl)}>
     {candidate.imageUrl ? <img className="str-comparator__card-image" src={candidate.imageUrl} alt={`Stay at ${candidate.title ?? "comparable property"}`} loading="lazy" /> : <div className="str-comparator__card-image str-comparator__card-image--fallback" role="img" aria-label="Stay image unavailable">⌂</div>}
     <div className="str-comparator__identity">
@@ -14,17 +25,22 @@ export function StrComparableCard({ candidate, rank, context }: Readonly<{
       <div className="str-comparator__title-row"><h3><a href={candidate.listingUrl} target="_blank" rel="noreferrer">{candidate.title ?? `Comparable ${rank}`}</a></h3></div>
       <p className="str-comparator__home-facts">{[candidate.roomType ?? candidate.propertyType ?? "Entire home", formatBedroomBathroomCount(candidate.bedrooms, "bedroom"), formatBedroomBathroomCount(candidate.bathrooms, "bathroom")].filter(Boolean).join(" · ")}</p>
       <dl className="str-comparator__quick-facts">
-        <div><dt>Distance</dt><dd>{credibleDistance(candidate.distanceMiles)}</dd></div>
+        <div><dt>Current rate</dt><dd>{formatComparatorCurrency(candidate.observedNightlyPriceUsd)}<small>/night</small></dd></div>
         <div><dt>Guests</dt><dd>{candidate.guestCapacity ? `Sleeps ${candidate.guestCapacity}` : "Not listed"}</dd></div>
         <div><dt>Rating</dt><dd>{candidate.rating ? `★ ${candidate.rating.toFixed(2)}${candidate.reviewCount !== undefined ? ` (${candidate.reviewCount})` : ""}` : "Not rated"}</dd></div>
       </dl>
       {context && <p className="str-comparator__context">{context}</p>}
+      <div className="str-comparator__calendar-control">
+        <div className="str-comparator__calendar-row">
+          {calendarMetric ? <div className="str-comparator__booking-metric"><span>Booked or blocked</span><strong>{formatComparatorPercent(calendarMetric.unavailablePercentage)}</strong><small>Based on {calendarMetric.observationCount} nights</small></div> : <p className="str-comparator__calendar-empty">Not enough calendar data for this window.</p>}
+          <CalendarWindowSelect id={`calendar-window-${rank}-${safeId(candidate.listingUrl)}`} value={calendarWindowDays} onChange={setCalendarWindowDays} />
+        </div>
+        <div className="str-comparator__calendar-meta"><small>{candidate.calendarObservedAt ? `Checked ${formatComparatorDate(candidate.calendarObservedAt)}` : "No collection date"}</small>{onRefreshCalendar && <button type="button" onClick={refreshCalendar} disabled={refreshStatus === "refreshing"}>{refreshStatus === "refreshing" ? "Refreshing…" : "Refresh"}</button>}</div>
+        {refreshStatus === "error" && <p className="str-comparator__calendar-error" role="alert">Calendar could not be refreshed. Saved data is unchanged.</p>}
+      </div>
       <details className="str-comparator__details"><summary>Why this match</summary><p>{candidate.matchReasons.length ? candidate.matchReasons.join(" · ") : "Ranked by distance and property similarity."}</p></details>
+      {footer}
     </div>
-    <aside className="str-comparator__evidence">
-      <div className="str-comparator__current-rate"><span>Current rate</span><strong>{formatComparatorCurrency(candidate.observedNightlyPriceUsd)}<small>/night</small></strong></div>
-      {hasCalendarMetric(candidate) && <div className="str-comparator__booking-metric"><span>Booked or blocked</span><strong>{formatComparatorPercent(candidate.calendarUnavailablePercentage)}</strong><small>Based on {candidate.calendarObservationCount} observed calendar nights</small></div>}
-    </aside>
   </article>;
 }
 
@@ -33,15 +49,7 @@ function openListingFromCard(event: React.MouseEvent<HTMLElement>, listingUrl: s
   window.open(listingUrl, "_blank", "noopener,noreferrer");
 }
 
-function credibleDistance(distanceMiles: number) {
-  return Number.isFinite(distanceMiles) && distanceMiles >= 0 && distanceMiles <= 100 ? formatComparatorDistance(distanceMiles) : "Unavailable";
+export function CalendarWindowSelect({ value, onChange, id }: Readonly<{ value: CalendarWindowDays; onChange(value: CalendarWindowDays): void; id: string }>) {
+  return <fieldset className="str-comparator__window-select"><legend>Calendar window</legend>{[15, 30, 45, 60, 90].map((days) => <label key={days}><input id={days === 15 ? id : undefined} type="radio" name={id} value={days} checked={value === days} onChange={() => onChange(days as CalendarWindowDays)} /><span>{days}d</span></label>)}</fieldset>;
 }
-
-function hasCalendarMetric(candidate: StrComparableDto) {
-  return candidate.calendarUnavailablePercentage !== undefined
-    && Number.isFinite(candidate.calendarUnavailablePercentage)
-    && candidate.calendarUnavailableNights !== undefined
-    && candidate.calendarUnavailableNights >= 0
-    && candidate.calendarObservationCount !== undefined
-    && candidate.calendarObservationCount > 0;
-}
+function safeId(value: string) { return value.replace(/[^a-z0-9]+/gi, "-").slice(-24); }

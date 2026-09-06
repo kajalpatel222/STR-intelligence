@@ -74,6 +74,21 @@ test("parses and propagates a natural-language home search", async () => {
   assert.equal(result.statusCode, 200);
 });
 
+test("validates and propagates a direct Zillow home URL through the existing workflow", async () => {
+  const listingUrl = "https://www.zillow.com/homedetails/1-Pine-Rd-Oakhurst-CA-93644/123_zpid/";
+  const handler = createPropertySearchHandler({ async invoke({ workflowState }) {
+    assert.equal(workflowState.searchRequest.source, "zillow_existing_home");
+    assert.equal(workflowState.searchRequest.location, "Oakhurst, CA");
+    assert.equal(workflowState.searchRequest.recordLimit, 1);
+    assert.equal(workflowState.searchRequest.listingUrl, listingUrl);
+    return { workflowState: { ...workflowState, status: "completed", normalizedListings: [] } };
+  } });
+  const result = await handler({ listingUrl });
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.body.message, "We could not load that Zillow property.");
+  assert.equal((await handler({ listingUrl: "https://example.com/home" })).statusCode, 422);
+});
+
 test("supports land price constraints and rejects ambiguous or incompatible searches", async () => {
   const handler = createPropertySearchHandler({
     async invoke({ workflowState }) {

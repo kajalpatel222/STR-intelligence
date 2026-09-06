@@ -6,6 +6,7 @@ import { normalizeSupportedLocation } from "../markets/supported-markets.js";
 import type { InvestmentCriteriaRepository } from "../criteria/repository.js";
 import { DEFAULT_INVESTMENT_CRITERIA } from "../../shared/investment-criteria.js";
 import { parsePropertySearchQuery, validatePropertySearchRequest } from "../../shared/property-search-query.js";
+import { validateZillowListingUrl } from "../../shared/zillow-listing-url.js";
 
 type PropertySearchInput = Readonly<{
   query?: unknown;
@@ -13,6 +14,7 @@ type PropertySearchInput = Readonly<{
   location?: unknown;
   maximumPriceUsd?: unknown;
   minimumBedrooms?: unknown;
+  listingUrl?: unknown;
 }>;
 
 type GraphInvoker = Readonly<{
@@ -24,6 +26,11 @@ export function createPropertySearchHandler(
   criteriaRepository?: Pick<InvestmentCriteriaRepository, "getDefaults">,
 ) {
   return async (input: PropertySearchInput) => {
+    const directListing = input.listingUrl !== undefined ? validateZillowListingUrl(input.listingUrl) : undefined;
+    if (directListing && "message" in directListing) {
+      return response(422, { status: "invalid", message: directListing.message });
+    }
+    const direct = directListing && "url" in directListing ? directListing : undefined;
     const parsed = typeof input.query === "string"
       ? parsePropertySearchQuery(input.query)
       : validatePropertySearchRequest({
@@ -32,14 +39,14 @@ export function createPropertySearchHandler(
         location: locationInput(input.location),
         constraints: { maximumPriceUsd: input.maximumPriceUsd, minimumBedrooms: input.minimumBedrooms },
       });
-    if (!parsed.ok || !parsed.request.propertyKind || !parsed.request.location) {
+    if (!direct && (!parsed.ok || !parsed.request.propertyKind || !parsed.request.location)) {
       return response(422, { status: "invalid", message: parsed.issues[0]?.message ?? "Describe the Homes or Land search you want to run.", issues: parsed.issues });
     }
     if (parsed.request.propertyKind === "land" && parsed.request.constraints.minimumBedrooms !== undefined) {
       return response(422, { status: "invalid", message: "Bedroom filters apply to Homes, not Land." });
     }
-    const propertyType = parsed.request.propertyKind === "land" ? "land" : "homes";
-    const location = normalizeSupportedLocation(`${parsed.request.location.city}, ${parsed.request.location.state}`)!;
+    const propertyType = direct ? "homes" : parsed.request.propertyKind === "land" ? "land" : "homes";
+    const location = direct?.location ?? normalizeSupportedLocation(`${parsed.request.location!.city}, ${parsed.request.location!.state}`)!;
 
     // Saved criteria are optional personalization; a missing/unavailable profile must never block listing search.
     const investmentCriteria = criteriaRepository
@@ -51,10 +58,11 @@ export function createPropertySearchHandler(
         source: propertyType === "land" ? "zillow_land" : "zillow_existing_home",
         location,
         lookbackDays: 7,
-        recordLimit: 5,
+        recordLimit: direct ? 1 : 5,
         listingCategory: "for_sale",
         homeType: propertyType === "homes" ? "house" : undefined,
         filters: { ...parsed.request.constraints },
+        ...(direct ? { listingUrl: direct.url } : {}),
       },
       investmentCriteria,
     });
@@ -70,7 +78,9 @@ export function createPropertySearchHandler(
     const plural = propertyType === "land" ? "land listings" : "homes";
     return response(200, {
       status: listings.length ? "success" : "no_results",
-      message: listings.length ? `Found ${listings.length} ${listings.length === 1 ? singular : plural} near ${location}.` : `No new ${plural} were found near ${location}.`,
+      message: listings.length
+        ? direct ? "Your Zillow property is ready to review." : `Found ${listings.length} ${listings.length === 1 ? singular : plural} near ${location}.`
+        : direct ? "We could not load that Zillow property." : `No new ${plural} were found near ${location}.`,
       listingCount: listings.length,
       listings,
     });

@@ -120,7 +120,7 @@ export function createFinancialAssumptions(
 
 export function createFinancialAssumptionsSnapshot(input: FinancialAssumptions): FinancialAssumptions {
   const result = validateFinancialAssumptions(input);
-  if (!result.ok) {
+  if ("errors" in result) {
     throw new Error(result.errors[0]?.message ?? "Financial assumptions are invalid.");
   }
   return result.value;

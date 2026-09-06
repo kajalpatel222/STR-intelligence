@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { StrComparableCard } from "./StrComparableCard.js";
 import { loadStrComparableLibrary, type StrComparableLibraryItem } from "./str-comparable-library-client.js";
+import { refreshStrComparableCalendar } from "./str-comparator-client.js";
 import { ProductHeader, type ProductView } from "./ProductHeader.js";
 
 export type LibrarySort = "recent" | "rating" | "distance" | "booking";
@@ -46,7 +47,7 @@ export function StrComparableLibrary({ onNavigate, loader = loadStrComparableLib
     {status === "error" && <div className="str-library__state str-library__state--error" role="alert"><strong>We could not load the STR library.</strong><span>Try again after confirming the local API is running.</span></div>}
     {status === "ready" && sorted.length === 0 && <div className="str-library__state" role="status"><strong>No stored comparables yet.</strong><span>Apply criteria to a Home and compare it with nearby STRs to build this library.</span></div>}
     {status === "ready" && sorted.length > 0 && <section className="str-library__cards" aria-label="Stored STR comparables">
-      {sorted.map((item, index) => <StrComparableCard key={item.listingUrl} candidate={item} rank={index + 1} context={libraryContext(item)} />)}
+      {sorted.map((item, index) => <StrComparableCard key={item.listingUrl} candidate={item} rank={index + 1} onRefreshCalendar={item.comparisonReference ? async () => { await refreshStrComparableCalendar(item.comparisonReference, item.listingUrl); setItems(await loader()); } : undefined} footer={<AssociatedPropertyLinks properties={item.associatedProperties} />} />)}
     </section>}
   </main>;
 }
@@ -60,10 +61,14 @@ export function sortComparableLibrary(items: readonly StrComparableLibraryItem[]
   });
 }
 
-function libraryContext(item: StrComparableLibraryItem) {
-  const matches = `${item.associatedPropertyCount} associated Zillow ${item.associatedPropertyCount === 1 ? "property" : "properties"}`;
-  const observed = item.latestObservedAt ? `Last observed ${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(item.latestObservedAt))}` : undefined;
-  return [matches, observed].filter(Boolean).join(" · ");
+function AssociatedPropertyLinks({ properties }: Readonly<{ properties: StrComparableLibraryItem["associatedProperties"] }>) {
+  if (!properties.length) return null;
+  return <div className="str-library__property-matches">
+    <p>Matched properties</p>
+    <div className="str-library__property-links" aria-label="Zillow properties associated with this comparable">
+      {properties.map((property) => <a key={property.listingUrl} href={property.listingUrl} target="_blank" rel="noreferrer">{property.address}</a>)}
+    </div>
+  </div>;
 }
 
 function descending(right: number | undefined, left: number | undefined) { return finite(right, -Infinity) - finite(left, -Infinity); }

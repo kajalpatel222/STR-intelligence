@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
-import { createStrComparisonsHandler, toPublicComparison } from "./str-comparisons.js";
+import { createStrComparisonLinksHandler, createStrComparisonsHandler, toPublicComparison } from "./str-comparisons.js";
 import type { StoredComparison, StrComparisonRepositoryPort } from "../str-comparator/repository.js";
 
 const reference = "4e14ec72-fdf3-45e7-8e5f-04835a476dde";
@@ -42,4 +42,28 @@ test("rejects selections that do not belong to the comparison", async () => {
   const result = await handler.select(reference, { listingUrls: ["https://www.airbnb.com/rooms/unrelated"] });
   assert.equal(result.statusCode, 400);
   assert.equal(selectionWrites, 0);
+});
+
+test("refreshes one saved calendar without changing comparable selections", async () => {
+  let selectionWrites = 0;
+  let selectedUrls: readonly string[] = [];
+  const store = { ...repository(), async updateSelections() { selectionWrites += 1; } };
+  const handler = createStrComparisonsHandler({ async invoke({ workflowState }) { selectedUrls = workflowState.selectedListingUrls; return { workflowState: { ...workflowState, status: "completed" } }; } }, store);
+  const result = await handler.refreshCalendar({ reference, listingUrl: stored.candidates[0]!.listingUrl });
+  assert.equal(result.statusCode, 200);
+  assert.deepEqual(selectedUrls, [stored.candidates[0]!.listingUrl]);
+  assert.equal(selectionWrites, 0);
+  assert.equal((await handler.refreshCalendar({ reference, listingUrl: "https://www.airbnb.com/rooms/unrelated" })).statusCode, 400);
+});
+
+test("returns only existing saved comparison links without invoking discovery", async () => {
+  const listingUrl = stored.target.listingUrl;
+  const handler = createStrComparisonLinksHandler({ async findSavedComparisons(urls) {
+    assert.deepEqual(urls, [listingUrl]);
+    return { [listingUrl]: reference };
+  } });
+  const result = await handler({ listingUrls: [listingUrl] });
+  assert.equal(result.statusCode, 200);
+  assert.deepEqual(result.body.comparisons, { [listingUrl]: reference });
+  assert.equal((await handler({ listingUrls: ["https://evil.example/home"] })).statusCode, 400);
 });

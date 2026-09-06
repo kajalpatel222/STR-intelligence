@@ -7,6 +7,7 @@ type ServerEnvironment = Readonly<{
   openRouterApiKey?: string;
   openRouterBaseUrl: string;
   openRouterModel?: string;
+  airbticsApiKey?: string;
 }>;
 
 function required(name: string): string {
@@ -33,6 +34,7 @@ export function getServerEnvironment(): ServerEnvironment {
     openRouterApiKey: optional("OPENROUTER_API_KEY"),
     openRouterBaseUrl: optional("OPENROUTER_BASE_URL") ?? "https://openrouter.ai/api/v1",
     openRouterModel: optional("OPENROUTER_MODEL"),
+    airbticsApiKey: optional("AIRBTICS_API_KEY"),
   };
 }
 
@@ -45,5 +47,6 @@ export function getServerConfigurationStatus() {
     supabaseServiceRoleKey: Boolean(optional("SUPABASE_SERVICE_ROLE_KEY")),
     openRouterApiKey: Boolean(optional("OPENROUTER_API_KEY")),
     openRouterModel: Boolean(optional("OPENROUTER_MODEL")),
+    airbticsApiKey: Boolean(optional("AIRBTICS_API_KEY")),
   } as const;
 }
