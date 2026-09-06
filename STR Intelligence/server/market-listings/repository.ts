@@ -31,12 +31,20 @@ export class MarketListingRepository {
   }
 
   async loadLatest(): Promise<MarketListingCollection | undefined> {
-    const { data: run, error } = await this.client.from("str_market_collections").select("id,label,gateway,status,page_number,provider_total_count,saved_count,collected_at").eq("status", "complete").order("collected_at", { ascending: false }).limit(1).maybeSingle();
+    const { data: latest, error } = await this.client.from("str_market_collections").select("id,label,gateway,status,page_number,provider_total_count,saved_count,collected_at").eq("status", "complete").order("collected_at", { ascending: false }).limit(1).maybeSingle();
     if (error) throw new Error("Unable to load the market collection.");
-    if (!run) return undefined;
-    const { data: rows, error: listingError } = await this.client.from("str_market_listing_snapshots").select("listing_url,name,gateway,property_type,room_type,bedrooms,bathrooms,accommodates,adr_usd,occupancy_percent,annual_revenue_usd,revenue_potential_usd,bookings_ltm,active_days_ltm,rating_percent,review_count,cleaning_fee_usd,minimum_nights,image_url,amenities,last_seen,collected_at").eq("collection_id", run.id);
+    if (!latest) return undefined;
+    const { data: runs, error: runsError } = await this.client.from("str_market_collections").select("id,label,gateway,status,page_number,provider_total_count,saved_count,collected_at").eq("status", "complete").eq("label", latest.label).order("collected_at", { ascending: false });
+    if (runsError) throw new Error("Unable to load market collection pages.");
+    // Reimports remain audit records; the current view uses only the newest snapshot for each provider page.
+    const latestByPage = new Map<number, NonNullable<typeof runs>[number]>();
+    for (const run of runs ?? []) if (!latestByPage.has(run.page_number)) latestByPage.set(run.page_number, run);
+    const selectedRuns = [...latestByPage.values()];
+    const { data: rows, error: listingError } = await this.client.from("str_market_listing_snapshots").select("listing_url,name,gateway,property_type,room_type,bedrooms,bathrooms,accommodates,adr_usd,occupancy_percent,annual_revenue_usd,revenue_potential_usd,bookings_ltm,active_days_ltm,rating_percent,review_count,cleaning_fee_usd,minimum_nights,image_url,amenities,last_seen,collected_at").in("collection_id", selectedRuns.map((run) => run.id));
     if (listingError) throw new Error("Unable to load market listings.");
-    return Object.freeze({ label: String(run.label), gateway: run.gateway, status: "complete", page: run.page_number, providerTotalCount: run.provider_total_count, savedCount: run.saved_count, collectedAt: run.collected_at, listings: Object.freeze((rows ?? []).map((row) => Object.freeze({
+    const uniqueRows = [...new Map((rows ?? []).map((row) => [row.listing_url, row])).values()];
+    const collectedPages = [...latestByPage.keys()].sort((a, b) => a - b);
+    return Object.freeze({ label: String(latest.label), gateway: latest.gateway, status: "complete", page: Math.max(...collectedPages), collectedPages: Object.freeze(collectedPages), providerTotalCount: latest.provider_total_count, savedCount: uniqueRows.length, collectedAt: latest.collected_at, listings: Object.freeze(uniqueRows.map((row) => Object.freeze({
       listingUrl: row.listing_url, name: row.name, gateway: row.gateway, propertyType: row.property_type ?? undefined,
       roomType: row.room_type ?? undefined, bedrooms: row.bedrooms ?? undefined, bathrooms: row.bathrooms ?? undefined,
       accommodates: row.accommodates ?? undefined, adrUsd: row.adr_usd ?? undefined, occupancyPercent: row.occupancy_percent ?? undefined,

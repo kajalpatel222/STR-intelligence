@@ -7,6 +7,7 @@ console.log(JSON.stringify({
   label: collection.label,
   savedCount: collection.savedCount,
   loadedCount: collection.listings.length,
+  collectedPages: collection.collectedPages,
   providerTotalCount: collection.providerTotalCount,
   defaultTopListing: [...collection.listings].sort((a, b) => (b.annualRevenueUsd ?? -1) - (a.annualRevenueUsd ?? -1))[0]?.name,
   defaultTopPropertyType: [...collection.listings].sort((a, b) => (b.annualRevenueUsd ?? -1) - (a.annualRevenueUsd ?? -1))[0]?.propertyType ?? null,

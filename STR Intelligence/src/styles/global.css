@@ -539,4 +539,7 @@ footer { display: flex; justify-content: space-between; gap: 20px; padding: 24px
 .market-listings__identity img,.market-listings__identity span { width: 48px; height: 42px; border-radius: 6px; background: #e5e8e3; object-fit: cover; }
 .market-listings__identity a { color: var(--ink); font-weight: 700; text-decoration: none; }
 .market-listings__identity a:hover { color: var(--green); text-decoration: underline; }
-@media (max-width: 620px) { .market-listings__header { padding-top: 36px; } .market-listings__filters { align-items: stretch; flex-direction: column; } .market-listings__filters select { width: 100%; } .market-listings__filters > strong { margin-left: 0; padding: 4px 0 0; } }
+.market-listings__pagination { display: flex; align-items: center; justify-content: flex-end; gap: 14px; padding: 16px; border: 1px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px; background: rgba(250,250,247,.72); font: 700 .72rem "Manrope",sans-serif; }
+.market-listings__pagination button { min-height: 36px; padding: 0 14px; border: 1px solid #c8d0ca; border-radius: 7px; background: white; color: var(--ink); font: inherit; }
+.market-listings__pagination button:disabled { color: #98a19b; background: #f2f3ef; }
+@media (max-width: 620px) { .market-listings__header { padding-top: 36px; } .market-listings__filters { align-items: stretch; flex-direction: column; } .market-listings__filters select { width: 100%; } .market-listings__filters > strong { margin-left: 0; padding: 4px 0 0; } .market-listings__pagination { justify-content: space-between; } }

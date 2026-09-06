@@ -31,6 +31,7 @@ export type MarketListingCollection = Readonly<{
   gateway: YosemiteGateway;
   status: "complete";
   page: number;
+  collectedPages: readonly number[];
   providerTotalCount: number;
   savedCount: number;
   collectedAt: string;
