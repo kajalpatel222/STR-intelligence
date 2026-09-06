@@ -5,6 +5,7 @@ export type MarketListing = Readonly<{
   listingUrl: string;
   name: string;
   gateway: YosemiteGateway;
+  gateways?: readonly YosemiteGateway[];
   propertyType?: string;
   roomType?: string;
   bedrooms?: string;
@@ -29,6 +30,7 @@ export type MarketListing = Readonly<{
 export type MarketListingCollection = Readonly<{
   label: string;
   gateway: YosemiteGateway;
+  gateways?: readonly YosemiteGateway[];
   status: "complete";
   page: number;
   collectedPages: readonly number[];

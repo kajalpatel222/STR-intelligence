@@ -20,6 +20,7 @@
     "market:pilot": "node --env-file=.env --import tsx server/market-listings/collect-pilot.ts",
     "market:check": "node --env-file=.env --import tsx server/market-listings/check-pilot.ts",
     "market:collect-remaining": "node --env-file=.env --import tsx server/market-listings/collect-remaining.ts",
+    "market:collect-region": "node --env-file=.env --import tsx server/market-listings/collect-region.ts",
     "ingest:fixture": "node --env-file=.env --import tsx server/ingest/cli.ts fixture",
     "ingest:live": "node --env-file=.env --import tsx server/ingest/cli.ts live",
     "build": "tsc -b && vite build --configLoader runner",

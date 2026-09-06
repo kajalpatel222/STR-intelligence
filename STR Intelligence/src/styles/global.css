@@ -533,10 +533,36 @@ footer { display: flex; justify-content: space-between; gap: 20px; padding: 24px
 .market-listings__filters input { min-height: 40px; width: 100%; padding: 0 11px; border: 1px solid #c8d0ca; border-radius: 7px; background: white; color: var(--ink); font: 500 .78rem "Manrope",sans-serif; }
 .market-listings__filters select { min-height: 40px; padding: 0 34px 0 11px; border: 1px solid #c8d0ca; border-radius: 7px; background: white; color: var(--ink); }
 .market-listings__filters > strong { margin-left: auto; padding-bottom: 10px; font: 700 .72rem "Manrope",sans-serif; }
+.market-listings__compare-bar { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 16px; border-inline: 1px solid var(--line); background: #e9f1ec; }
+.market-listings__compare-bar p { display: grid; gap: 2px; margin: 0; font: 600 .76rem "Manrope",sans-serif; }
+.market-listings__compare-bar p span { color: var(--muted); font-size: .68rem; font-weight: 500; }
+.market-listings__compare-bar > div { display: flex; gap: 8px; }
+.market-listings__compare-bar button,.market-listings__comparison header button { min-height: 38px; padding: 0 14px; border: 1px solid var(--green); border-radius: 7px; background: var(--green); color: white; font: 700 .7rem "Manrope",sans-serif; }
+.market-listings__compare-bar .button-secondary,.market-listings__comparison header .button-secondary { border-color: #b8c5bd; background: transparent; color: var(--green); }
+.market-listings__compare-bar button:disabled { cursor: not-allowed; opacity: .45; }
+.market-listings__comparison { padding: 24px; border: 1px solid var(--line); border-top: 0; background: #f4f5ef; }
+.market-listings__comparison > header { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
+.market-listings__comparison h2 { margin: 3px 0 0; font-size: clamp(1.35rem,2vw,1.8rem); }
+.market-listings__comparison-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.market-listings__comparison article { overflow: hidden; border: 1px solid #d5d8cf; border-radius: 10px; background: var(--paper); }
+.market-listings__comparison article > img,.market-listings__comparison-fallback { width: 100%; height: 132px; background: #e2e6e0; object-fit: cover; }
+.market-listings__comparison-body { padding: 15px; }
+.market-listings__comparison h3 { margin: 0 0 5px; font-size: 1rem; line-height: 1.25; }
+.market-listings__comparison h3 a { color: var(--ink); text-decoration: none; }
+.market-listings__comparison h3 a:hover { color: var(--green); text-decoration: underline; }
+.market-listings__comparison-body > p { min-height: 32px; margin: 0 0 14px; color: var(--muted); font: 500 .68rem "Manrope",sans-serif; }
+.market-listings__comparison dl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0; }
+.market-listings__comparison dl div { display: grid; gap: 2px; }
+.market-listings__comparison dt { color: var(--muted); font: 600 .62rem "Manrope",sans-serif; }
+.market-listings__comparison dd { margin: 0; color: var(--ink); font: 800 .75rem "Manrope",sans-serif; }
+.market-listings__empty { margin: 0; padding: 28px 18px; border: 1px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px; color: var(--muted); background: rgba(250,250,247,.72); text-align: center; }
 .market-listings__table-wrap { overflow-x: auto; border: 1px solid var(--line); border-top: 0; }
 .market-listings table { width: 100%; min-width: 980px; border-collapse: collapse; background: var(--paper); }
 .market-listings th { padding: 12px 14px; color: #6a766f; background: #f2f3ef; font: 700 .62rem "Manrope",sans-serif; text-align: left; text-transform: uppercase; letter-spacing: .05em; }
 .market-listings td { padding: 13px 14px; border-top: 1px solid var(--line); color: #47554e; font-size: .72rem; vertical-align: middle; }
+.market-listings tr.is-selected td { background: #f0f6f2; }
+.market-listings__select { width: 54px; text-align: center; }
+.market-listings__select input { width: 17px; height: 17px; accent-color: var(--green); }
 .market-listings__identity { display: grid; grid-template-columns: 48px minmax(180px,1fr); align-items: center; gap: 10px; }
 .market-listings__identity img,.market-listings__identity span { width: 48px; height: 42px; border-radius: 6px; background: #e5e8e3; object-fit: cover; }
 .market-listings__identity a { color: var(--ink); font-weight: 700; text-decoration: none; }
@@ -544,4 +570,5 @@ footer { display: flex; justify-content: space-between; gap: 20px; padding: 24px
 .market-listings__pagination { display: flex; align-items: center; justify-content: flex-end; gap: 14px; padding: 16px; border: 1px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px; background: rgba(250,250,247,.72); font: 700 .72rem "Manrope",sans-serif; }
 .market-listings__pagination button { min-height: 36px; padding: 0 14px; border: 1px solid #c8d0ca; border-radius: 7px; background: white; color: var(--ink); font: inherit; }
 .market-listings__pagination button:disabled { color: #98a19b; background: #f2f3ef; }
-@media (max-width: 620px) { .market-listings__header { padding-top: 36px; } .market-listings__filters { align-items: stretch; flex-direction: column; } .market-listings__filters select { width: 100%; } .market-listings__filters > strong { margin-left: 0; padding: 4px 0 0; } .market-listings__pagination { justify-content: space-between; } }
+@media (max-width: 760px) { .market-listings__comparison-grid { grid-template-columns: 1fr; } .market-listings__comparison article { display: grid; grid-template-columns: 120px 1fr; } .market-listings__comparison article > img,.market-listings__comparison-fallback { height: 100%; min-height: 180px; } }
+@media (max-width: 620px) { .market-listings__header { padding-top: 36px; } .market-listings__filters { align-items: stretch; flex-direction: column; } .market-listings__filters select { width: 100%; } .market-listings__filters > strong { margin-left: 0; padding: 4px 0 0; } .market-listings__compare-bar,.market-listings__comparison > header { align-items: stretch; flex-direction: column; } .market-listings__compare-bar > div { display: grid; grid-template-columns: 1fr 1fr; } .market-listings__comparison { padding: 18px; } .market-listings__comparison article { grid-template-columns: 92px 1fr; } .market-listings__comparison article > img,.market-listings__comparison-fallback { min-height: 210px; } .market-listings__pagination { justify-content: space-between; } }
