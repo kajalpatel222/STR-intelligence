@@ -10,13 +10,14 @@ type Props = Readonly<{
 
 export function StrComparatorPreview({ comparison, propertyLabel, detailsButtonId, onSeeDetails }: Props) {
   const candidates = comparison.candidates.slice(0, 5);
+  const radiusMiles = comparison.radiusMiles ?? 1;
 
   return (
     <details className="str-preview" open>
       <summary className="str-preview__heading">
         <div>
           <strong>Nearby short-term rentals</strong>
-          <span>{candidates.length} strongest {candidates.length === 1 ? "match" : "matches"}</span>
+          <span>{comparison.candidates.length} saved {comparison.candidates.length === 1 ? "match" : "matches"} within {radiusMiles} {radiusMiles === 1 ? "mile" : "miles"}</span>
         </div>
       </summary>
       <div className="str-preview__body" aria-label={`Nearby short-term rentals for ${propertyLabel}`}>

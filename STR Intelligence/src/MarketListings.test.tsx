@@ -11,6 +11,19 @@ test("market listings default ranking can put highest annual revenue first", () 
   assert.deepEqual(rows.map((row) => row.name), ["One", "Two"]);
 });
 
+test("sorts revenue, rating, occupancy, and ADR in either direction with missing values last", () => {
+  const rows: MarketListing[] = [
+    { ...base, name: "Lower", annualRevenueUsd: 40_000, ratingPercent: 88, occupancyPercent: 52, adrUsd: 210 },
+    { ...base, listingUrl: "https://www.airbnb.com/rooms/2", name: "Higher", annualRevenueUsd: 70_000, ratingPercent: 97, occupancyPercent: 76, adrUsd: 340 },
+    { ...base, listingUrl: "https://www.airbnb.com/rooms/3", name: "Missing" },
+  ];
+
+  for (const key of ["revenue", "rating", "occupancy", "adr"] as const) {
+    assert.deepEqual(sortMarketListings(rows, key, "desc").map((row) => row.name), ["Higher", "Lower", "Missing"]);
+    assert.deepEqual(sortMarketListings(rows, key, "asc").map((row) => row.name), ["Lower", "Higher", "Missing"]);
+  }
+});
+
 test("paginates a collection without mutating it", () => {
   const rows = Array.from({ length: 51 }, (_, index) => ({ ...base, listingUrl: `https://www.airbnb.com/rooms/${index}`, name: `Listing ${index}` }));
   assert.equal(paginateMarketListings(rows, 1).length, 25);

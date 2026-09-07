@@ -8,6 +8,7 @@ function cacheClient(row: Record<string, unknown> | null, error: unknown = null)
     select() { return this; },
     eq(column: string, value: unknown) { filters.push([column, value]); return this; },
     in() { return this; },
+    contains(column: string, value: unknown) { filters.push([column, value]); return this; },
     order() { return this; },
     limit() { return this; },
     async maybeSingle() { return { data: row, error }; },
@@ -26,7 +27,7 @@ test("classifies the latest canonical-property comparison as fresh", async () =>
   });
   const repository = new StrComparisonRepository(fake.client as never);
 
-  const result = await repository.findComparisonCache("canonical-property-1", new Date("2026-08-30T12:00:00.000Z"));
+  const result = await repository.findComparisonCache("canonical-property-1", 2, new Date("2026-08-30T12:00:00.000Z"));
 
   assert.deepEqual(result, {
     status: "fresh",
@@ -34,7 +35,7 @@ test("classifies the latest canonical-property comparison as fresh", async () =>
     completedAt: "2026-08-29T12:00:00.000Z",
     expiresAt: "2026-09-05T12:00:00.000Z",
   });
-  assert.deepEqual(fake.filters, [["canonical_property_id", "canonical-property-1"]]);
+  assert.deepEqual(fake.filters, [["canonical_property_id", "canonical-property-1"], ["request_snapshot", { source: "airbtics_market", radiusMiles: 2 }]]);
 });
 
 test("returns stale comparison evidence instead of treating it as missing", async () => {
@@ -45,7 +46,7 @@ test("returns stale comparison evidence instead of treating it as missing", asyn
   });
   const repository = new StrComparisonRepository(fake.client as never);
 
-  const result = await repository.findComparisonCache("canonical-property-2", new Date("2026-08-30T12:00:00.000Z"));
+  const result = await repository.findComparisonCache("canonical-property-2", 5, new Date("2026-08-30T12:00:00.000Z"));
 
   assert.equal(result.status, "stale");
   assert.equal(result.status === "stale" && result.publicReference, "stale-comparison-reference");
@@ -56,7 +57,7 @@ test("returns missing when a canonical property has no saved comparison", async 
   const repository = new StrComparisonRepository(fake.client as never);
 
   assert.deepEqual(
-    await repository.findComparisonCache("canonical-property-3", new Date("2026-08-30T12:00:00.000Z")),
+    await repository.findComparisonCache("canonical-property-3", 10, new Date("2026-08-30T12:00:00.000Z")),
     { status: "missing" },
   );
 });
@@ -65,38 +66,10 @@ test("resolves the newest saved comparison reference for each Zillow URL", async
   const listingUrl = "https://www.zillow.com/homedetails/123";
   const queries = {
     property_source_ids: { select() { return this; }, in() { return Promise.resolve({ data: [{ canonical_property_id: "property-1", external_url: listingUrl }], error: null }); } },
-    str_comparison_runs: { select() { return this; }, in() { return this; }, order() { return Promise.resolve({ data: [{ canonical_property_id: "property-1", public_reference: "newest-reference" }, { canonical_property_id: "property-1", public_reference: "older-reference" }], error: null }); } },
+    str_comparison_runs: { select() { return this; }, in() { return this; }, contains() { return this; }, order() { return Promise.resolve({ data: [{ canonical_property_id: "property-1", public_reference: "newest-reference" }, { canonical_property_id: "property-1", public_reference: "older-reference" }], error: null }); } },
   };
   const repository = new StrComparisonRepository({ from(table: keyof typeof queries) { return queries[table]; } } as never);
   assert.deepEqual(await repository.findSavedComparisons([listingUrl]), { [listingUrl]: "newest-reference" });
-});
-
-test("deduplicates the library by Airbnb identity and keeps closest cross-property distance", async () => {
-  const base = { provider_listing_key: "stay-1", listing_url: "https://www.airbnb.com/rooms/1", latitude: 37, longitude: -119,
-    amenities: [], observed_nightly_price_usd: 220, observed_check_in: "2026-09-11", observed_check_out: "2026-09-13",
-    similarity_score: 80, match_reasons: [], raw_payload: {}, str_rate_observations: [], str_calendar_snapshots: [] };
-  const rows = [
-    { ...base, title: "Latest title", distance_miles: 2.4, observed_at: "2026-08-30T00:00:00Z", comparison_run: { status: "discovered", canonical_property_id: "property-1", canonical_properties: { address_line1: "One Main St", city: "Oakhurst", state: "CA" } } },
-    { ...base, title: "Older title", distance_miles: .8, observed_at: "2026-08-20T00:00:00Z", comparison_run: { status: "discovered", canonical_property_id: "property-2", canonical_properties: { address_line1: "Two Main St", city: "Mariposa", state: "CA" } } },
-  ];
-  const queries = {
-    str_comparison_candidates: { select() { return this; }, in() { return this; }, order() { return this; }, limit() { return Promise.resolve({ data: rows, error: null }); } },
-    listing_snapshots: { select() { return this; }, in() { return this; }, order() { return Promise.resolve({ data: [
-      { canonical_property_id: "property-1", listing_url: "https://www.zillow.com/homedetails/one", raw_payload: { imgSrc: "https://photos.example.com/one.jpg" }, observed_at: "2026-08-30" },
-      { canonical_property_id: "property-2", listing_url: "https://www.zillow.com/homedetails/two", raw_payload: { imageUrl: "https://photos.example.com/two.jpg" }, observed_at: "2026-08-29" },
-    ], error: null }); } },
-  };
-  const repository = new StrComparisonRepository({ from(table: keyof typeof queries) { return queries[table]; } } as never);
-
-  const result = await repository.listComparableLibrary();
-  assert.equal(result.length, 1);
-  assert.equal(result[0]!.comparable.title, "Latest title");
-  assert.equal(result[0]!.comparable.distanceMiles, .8);
-  assert.equal(result[0]!.associatedPropertyCount, 2);
-  assert.deepEqual(result[0]!.associatedProperties, [
-    { listingUrl: "https://www.zillow.com/homedetails/one", address: "One Main St, Oakhurst, CA", imageUrl: "https://photos.example.com/one.jpg" },
-    { listingUrl: "https://www.zillow.com/homedetails/two", address: "Two Main St, Mariposa, CA", imageUrl: "https://photos.example.com/two.jpg" },
-  ]);
 });
 
 test("maps only the latest immutable evidence batch into the comparable card", () => {

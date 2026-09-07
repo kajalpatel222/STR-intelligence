@@ -24,13 +24,24 @@ function provider(records = fixtures()): StrComparatorProvider & { calls: number
   return { calls: 0, async discover() { this.calls += 1; return { records, errors: [] }; }, async collectCalendars() { this.calls += 1; return { records: [], errors: [] }; } };
 }
 
-test("discovery ranks and persists no more than five comparable stays", async () => {
+test("database discovery persists every eligible stay within five miles", async () => {
   const repository = new MemoryRepository(); const source = provider();
   const result = await createStrComparatorGraph({ provider: source, repository }).invoke({ workflowState: initializeStrComparatorWorkflowState({ workflowId: "wf", intent: "discover", listingUrl: target.listingUrl }) });
   assert.equal(result.workflowState.status, "completed");
   assert.equal(source.calls, 1);
-  assert.equal(repository.saved.length, 5);
+  assert.equal(repository.saved.length, 7);
   assert.ok(result.workflowState.comparisonReference);
+});
+
+test("uses the requested radius for deterministic discovery and persistence", async () => {
+  const repository = new MemoryRepository();
+  const source = provider([
+    { ...fixtures(1)[0]!, latitude: 37.337, listingId: "inside", url: "https://www.airbnb.com/rooms/inside" },
+    { ...fixtures(1)[0]!, latitude: 37.36, listingId: "outside", url: "https://www.airbnb.com/rooms/outside" },
+  ]);
+  const result = await createStrComparatorGraph({ provider: source, repository }).invoke({ workflowState: initializeStrComparatorWorkflowState({ workflowId: "wf", intent: "discover", listingUrl: target.listingUrl, radiusMiles: 1 }) });
+  assert.equal(result.workflowState.radiusMiles, 1);
+  assert.deepEqual(repository.saved.map((item) => item.providerListingKey), ["inside"]);
 });
 
 test("fresh cache bypasses provider", async () => {
@@ -47,8 +58,8 @@ test("stale cache refreshes through the provider and persists a new immutable ru
   const source = provider();
   const result = await createStrComparatorGraph({ provider: source, repository }).invoke({ workflowState: initializeStrComparatorWorkflowState({ workflowId: "wf", intent: "discover", listingUrl: target.listingUrl }) });
   assert.equal(source.calls, 1);
-  assert.equal(repository.saved.length, 5);
-  assert.equal(result.workflowState.dataOrigin, "provider");
+  assert.equal(repository.saved.length, 7);
+  assert.equal(result.workflowState.dataOrigin, "market_database");
   assert.notEqual(result.workflowState.comparisonReference, "4e14ec72-fdf3-45e7-8e5f-04835a476dde");
 });
 
@@ -83,7 +94,7 @@ test("explicit refresh bypasses a fresh cache", async () => {
   const source = provider();
   const result = await createStrComparatorGraph({ provider: source, repository }).invoke({ workflowState: initializeStrComparatorWorkflowState({ workflowId: "wf", intent: "discover", listingUrl: target.listingUrl, bypassCache: true }) });
   assert.equal(source.calls, 1);
-  assert.equal(result.workflowState.dataOrigin, "provider");
+  assert.equal(result.workflowState.dataOrigin, "market_database");
 });
 
 test("sorts and deduplicates calendar dates before the 90-day signal", () => {

@@ -58,15 +58,15 @@ test("renders a compact saved-property card with financial and on-demand STR act
   assert.match(markup, /href="https:\/\/www\.zillow\.com\/homedetails\/1"/);
 });
 
-test("omits the saved-comparison action when the property has no comparison", () => {
-  const markup = renderToStaticMarkup(createElement(FinancialDashboardCard, { analysis: analysis("1"), onOpen: () => undefined }));
-  assert.equal(markup.includes("View nearby STRs"), false);
+test("can show the nearby-STR action before a saved comparison exists", () => {
+  const markup = renderToStaticMarkup(createElement(FinancialDashboardCard, { analysis: analysis("1"), onOpen: () => undefined, onOpenComparison: () => undefined }));
+  assert.equal(markup.includes("View nearby STRs"), true);
 });
 
 test("shows a concise error when a saved comparison cannot be opened", () => {
   const markup = renderToStaticMarkup(createElement(FinancialDashboardCard, { analysis: analysis("1"), onOpen: () => undefined, onOpenComparison: () => undefined, comparisonError: true }));
   assert.match(markup, /role="alert"/);
-  assert.match(markup, /Saved comparison could not be opened/);
+  assert.match(markup, /Nearby STRs could not be loaded/);
 });
 
 test("renders the financial dashboard navigation and loading state accessibly", () => {

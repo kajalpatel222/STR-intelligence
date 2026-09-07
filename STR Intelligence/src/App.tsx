@@ -7,7 +7,6 @@ import { evaluateCurrentListings } from "./attention-client";
 import { StrComparatorWorkspace } from "./StrComparatorWorkspace";
 import { StrComparatorPreview } from "./StrComparatorPreview";
 import { strComparatorClient, type StrComparisonDto } from "./str-comparator-client";
-import { StrComparableLibrary } from "./StrComparableLibrary";
 import { ProductHeader, type ProductView } from "./ProductHeader";
 import { FinancialAnalysisWorkspace } from "./FinancialAnalysisWorkspace";
 import { FinancialDashboard } from "./FinancialDashboard";
@@ -114,7 +113,6 @@ export default function App() {
     if (listing?.url) return <StrComparatorWorkspace listingUrl={listing.url} propertyLabel={listing.address ?? listing.title} initialComparison={comparisons[comparatorListingIndex]} onBack={() => setComparatorListingIndex(null)} />;
   }
 
-  if (activeView === "library") return <StrComparableLibrary onNavigate={setActiveView} />;
   if (activeView === "financials") return <FinancialDashboard onNavigate={setActiveView} />;
   if (activeView === "markets") return <MarketListings onNavigate={setActiveView} />;
 

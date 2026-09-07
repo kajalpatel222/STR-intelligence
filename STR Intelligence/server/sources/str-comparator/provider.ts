@@ -17,6 +17,9 @@ export type ProviderBatch<T> = Readonly<{
 
 export type DiscoveryRequest = Readonly<{
   location: string;
+  latitude?: number;
+  longitude?: number;
+  radiusMiles?: number;
   limit?: number;
   currency?: string;
   locale?: string;
@@ -26,6 +29,7 @@ export type DiscoveryRequest = Readonly<{
 
 export type DiscoveredListing = Readonly<{
   provider: "airbnb";
+  dataSource?: "apify" | "airbtics_market";
   listingId: string;
   url: string;
   title?: string;
@@ -39,6 +43,9 @@ export type DiscoveredListing = Readonly<{
   bathrooms?: number;
   maxGuests?: number;
   nightlyRate?: number;
+  adrLtmUsd?: number;
+  occupancyLtmPercent?: number;
+  annualRevenueLtmUsd?: number;
   currency?: string;
   rating?: number;
   reviewCount?: number;
@@ -46,6 +53,7 @@ export type DiscoveredListing = Readonly<{
   isSuperhost?: boolean;
   amenities?: readonly string[];
   scrapedAt?: string;
+  marketCollectedAt?: string;
 }>;
 
 export type CalendarRequest = Readonly<{

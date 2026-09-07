@@ -17,6 +17,7 @@ export class MarketListingRepository {
     if (input.result.listings.length) {
       const { error } = await this.client.from("str_market_listing_snapshots").insert(input.result.listings.map((listing) => ({
         collection_id: run.id, listing_url: listing.listingUrl, name: listing.name, gateway: listing.gateway,
+        latitude: listing.latitude ?? null, longitude: listing.longitude ?? null,
         property_type: listing.propertyType ?? null, room_type: listing.roomType ?? null, bedrooms: listing.bedrooms ?? null,
         bathrooms: listing.bathrooms ?? null, accommodates: listing.accommodates ?? null, adr_usd: listing.adrUsd ?? null,
         occupancy_percent: listing.occupancyPercent ?? null, annual_revenue_usd: listing.annualRevenueUsd ?? null,
@@ -46,7 +47,7 @@ export class MarketListingRepository {
     const rows: Record<string, any>[] = [];
     const pageSize = 1_000;
     for (let from = 0; ; from += pageSize) {
-      const { data, error: listingError } = await this.client.from("str_market_listing_snapshots").select("listing_url,name,gateway,property_type,room_type,bedrooms,bathrooms,accommodates,adr_usd,occupancy_percent,annual_revenue_usd,revenue_potential_usd,bookings_ltm,active_days_ltm,rating_percent,review_count,cleaning_fee_usd,minimum_nights,image_url,amenities,last_seen,collected_at").in("collection_id", selectedRuns.map((run) => run.id)).range(from, from + pageSize - 1);
+      const { data, error: listingError } = await this.client.from("str_market_listing_snapshots").select("listing_url,name,latitude,longitude,gateway,property_type,room_type,bedrooms,bathrooms,accommodates,adr_usd,occupancy_percent,annual_revenue_usd,revenue_potential_usd,bookings_ltm,active_days_ltm,rating_percent,review_count,cleaning_fee_usd,minimum_nights,image_url,amenities,last_seen,collected_at").in("collection_id", selectedRuns.map((run) => run.id)).range(from, from + pageSize - 1);
       if (listingError) throw new Error("Unable to load market listings.");
       rows.push(...(data ?? []));
       if ((data?.length ?? 0) < pageSize) break;
@@ -64,6 +65,7 @@ export class MarketListingRepository {
     const providerTotalCount = [...newestByGateway.values()].reduce((total, run) => total + Number(run.provider_total_count), 0);
     return Object.freeze({ label: "Yosemite gateway coverage", gateway: latest.gateway, gateways: Object.freeze(gateways), status: "complete", page: Math.max(...collectedPages), collectedPages: Object.freeze(collectedPages), providerTotalCount, savedCount: uniqueRows.size, collectedAt: latest.collected_at, listings: Object.freeze([...uniqueRows.values()].map(({ row, gateways: matchedGateways }) => Object.freeze({
       listingUrl: row.listing_url, name: row.name, gateway: row.gateway, gateways: Object.freeze([...matchedGateways]), propertyType: row.property_type ?? undefined,
+      latitude: row.latitude ?? undefined, longitude: row.longitude ?? undefined,
       roomType: row.room_type ?? undefined, bedrooms: row.bedrooms ?? undefined, bathrooms: row.bathrooms ?? undefined,
       accommodates: row.accommodates ?? undefined, adrUsd: row.adr_usd ?? undefined, occupancyPercent: row.occupancy_percent ?? undefined,
       annualRevenueUsd: row.annual_revenue_usd ?? undefined, revenuePotentialUsd: row.revenue_potential_usd ?? undefined,

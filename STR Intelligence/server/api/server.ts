@@ -6,13 +6,11 @@ import type { IngestionTimings } from "../ingest/types.js";
 import { CriteriaDefaultsRepository } from "../criteria/repository.js";
 import { createInvestmentCriteriaHandler } from "./investment-criteria.js";
 import { handleAttentionEvaluation } from "./attention-evaluation.js";
-import { ApifyClient } from "apify-client";
 import { getServerEnvironment } from "../config/env.js";
-import { ApifyAirbnbProvider } from "../sources/str-comparator/apify-provider.js";
+import { AirbticsDatabaseComparatorProvider } from "../sources/str-comparator/airbtics-database-provider.js";
 import { StrComparisonRepository } from "../str-comparator/repository.js";
 import { createStrComparatorGraph } from "../workflow/str-comparator-graph.js";
 import { createStrComparisonLinksHandler, createStrComparisonsHandler } from "./str-comparisons.js";
-import { createStrComparableLibraryHandler } from "./str-comparable-library.js";
 import { FinancialAnalysisRepository } from "../financial/repository.js";
 import { createFinancialAnalysesHandler } from "./financial-analyses.js";
 import { OpenRouterStrPotentialProvider } from "../str-potential/openrouter-provider.js";
@@ -36,15 +34,9 @@ const handlePropertySearch = createPropertySearchHandler(liveGraph, criteriaRepo
 const handleInvestmentCriteria = createInvestmentCriteriaHandler(criteriaRepository);
 const environment = getServerEnvironment();
 const comparisonRepository = new StrComparisonRepository();
-const comparisonProvider = new ApifyAirbnbProvider({
-  client: new ApifyClient({ token: environment.apifyApiToken }),
-  discoveryActorId: environment.apifyAirbnbDiscoveryActorId,
-  calendarActorId: environment.apifyAirbnbCalendarActorId,
-  timeoutMs: 300_000,
-});
+const comparisonProvider = new AirbticsDatabaseComparatorProvider();
 const handleStrComparisons = createStrComparisonsHandler(createStrComparatorGraph({ provider: comparisonProvider, repository: comparisonRepository }), comparisonRepository);
 const handleStrComparisonLinks = createStrComparisonLinksHandler(comparisonRepository);
-const handleStrComparableLibrary = createStrComparableLibraryHandler(comparisonRepository);
 const handleFinancialAnalyses = createFinancialAnalysesHandler(new FinancialAnalysisRepository());
 const strPotentialRepository = new StrPotentialRepository();
 const strPotentialProvider = environment.openRouterApiKey && environment.openRouterModel
@@ -72,7 +64,6 @@ export async function handleApiRequest(request: import("node:http").IncomingMess
   const isComparisonLinks = request.method === "POST" && pathname === "/api/str-comparison-links";
   const isSavedComparisonGet = request.method === "POST" && pathname === "/api/saved-str-comparison";
   const isCalendarRefresh = request.method === "POST" && pathname === "/api/refresh-str-calendar";
-  const isComparableLibrary = request.method === "GET" && pathname === "/api/str-comparables";
   const isFinancialAnalysesGet = request.method === "GET" && pathname === "/api/financial-analyses";
   const isFinancialAnalysesPost = request.method === "POST" && pathname === "/api/financial-analyses";
   const isStrPotential = request.method === "POST" && pathname === "/api/str-potential";
@@ -82,7 +73,7 @@ export async function handleApiRequest(request: import("node:http").IncomingMess
   const isComparisonSelect = request.method === "PUT" && comparisonMatch?.[2] === "selections";
   const isComparisonEvidence = request.method === "POST" && comparisonMatch?.[2] === "evidence";
   const isComparisonRefresh = request.method === "POST" && comparisonMatch?.[2] === "refresh";
-  if (!isPropertySearch && !isCriteriaGet && !isCriteriaPut && !isAttentionEvaluation && !isComparisonCreate && !isComparisonLinks && !isSavedComparisonGet && !isCalendarRefresh && !isComparableLibrary && !isFinancialAnalysesGet && !isFinancialAnalysesPost && !isStrPotential && !isStrRevenueEstimate && !isMarketListingsGet && !isComparisonGet && !isComparisonSelect && !isComparisonEvidence && !isComparisonRefresh) {
+  if (!isPropertySearch && !isCriteriaGet && !isCriteriaPut && !isAttentionEvaluation && !isComparisonCreate && !isComparisonLinks && !isSavedComparisonGet && !isCalendarRefresh && !isFinancialAnalysesGet && !isFinancialAnalysesPost && !isStrPotential && !isStrRevenueEstimate && !isMarketListingsGet && !isComparisonGet && !isComparisonSelect && !isComparisonEvidence && !isComparisonRefresh) {
     sendJson(response, 404, { status: "not_found", message: "Not found." });
     return;
   }
@@ -95,8 +86,6 @@ export async function handleApiRequest(request: import("node:http").IncomingMess
       ? await handleStrRevenueEstimate(await readJson(request))
       : isStrPotential
       ? await handleStrPotential(await readJson(request))
-      : isComparableLibrary
-      ? await handleStrComparableLibrary()
       : isFinancialAnalysesGet
         ? await handleFinancialAnalyses.get()
         : isFinancialAnalysesPost
@@ -135,7 +124,7 @@ export async function handleApiRequest(request: import("node:http").IncomingMess
         ? "The request was not valid."
         : isPropertySearch
           ? "Property search is temporarily unavailable. Please try again later."
-          : isComparableLibrary || isComparisonCreate || isComparisonGet || isComparisonSelect || isComparisonEvidence || isComparisonRefresh
+          : isComparisonCreate || isComparisonGet || isComparisonSelect || isComparisonEvidence || isComparisonRefresh
             ? "STR comparison data is temporarily unavailable. Please try again later."
           : isFinancialAnalysesGet || isFinancialAnalysesPost
             ? "Financial analyses are temporarily unavailable. Please try again later."

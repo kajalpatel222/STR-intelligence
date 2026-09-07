@@ -26,8 +26,6 @@ Environment variable names:
 
 - `APIFY_API_TOKEN`
 - `APIFY_ZILLOW_ACTOR_ID`
-- `APIFY_AIRBNB_DISCOVERY_ACTOR_ID` (optional; defaults to the selected discovery Actor)
-- `APIFY_AIRBNB_CALENDAR_ACTOR_ID` (optional; defaults to the selected calendar Actor)
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `OPENROUTER_API_KEY`
 - `OPENROUTER_BASE_URL`
@@ -82,14 +80,12 @@ Provider-backed requests are capped at five minutes to fit the Vercel Hobby Flui
 - Evaluated Homes receive a transparent priority band: Review now, Promising, Low priority, or Ineligible. Review now requires Attention 75+ and Confidence 65+; strict-limit violations and unscorable listings are Ineligible.
 - After criteria are applied, current Home results are ordered by highest Attention Score, then Confidence Score; unevaluated Home and Land searches retain provider order.
 - Evaluated Home cards show their priority band and scores, with detailed evidence behind a compact disclosure.
-- Applying criteria exposes **Compare nearby STRs**. The [documented retrieval-first agentic pattern](docs/comparator-agentic-pattern.md) runs only when that button is clicked, checks Supabase first, returns a fresh comparison without an Actor call, or collects and ranks the five strongest entire-home matches when evidence is missing or stale.
-- Comparator evidence remains fresh for seven days. If refresh collection fails, the graph returns the latest stored comparison when one exists instead of discarding useful evidence.
-- The read-only **STR Library** aggregates unique saved Airbnb comparables across Zillow properties and sorts them by recent observation, rating, closest recorded distance, or highest booked-or-blocked signal without calling Apify.
+- Applying criteria exposes **Compare nearby STRs**. The [documented retrieval-first agentic pattern](docs/comparator-agentic-pattern.md) runs only when that button is clicked and retrieves deduplicated entire-home Airbtics market snapshots from Supabase. The comparator defaults to one mile and supports 1, 2, 5, and 10-mile filters without calling an Actor or paid provider.
+- Database-backed comparisons remain fresh for seven days and are reproducible from the saved market collection. Refreshing the paid market dataset is a separate explicit operation.
 - **Phase 6.2 financial workspace:** each priced Home result can open an editable base-case analysis prefilled with its Zillow asking price. The workspace uses the shared [365-day calculator](docs/financial-calculator-methodology.md) to show cash flow, cash-on-cash return, cap rate, DSCR, break-even occupancy, and transparent calculation details. Property tax is estimated from purchase price and an editable planning rate, while insurance and miscellaneous utilities remain explicit assumptions. Guest-paid cleaning fees, an editable 15% platform-fee default, county-prefilled transient occupancy tax, and an estimated all-in nightly total are shown separately from owner operating expenses. **Save to dashboard** creates an immutable, server-calculated Supabase version; the Financial Dashboard shows the latest version per Home and defaults to highest cash-on-cash return. It does not infer ADR/occupancy from comparator evidence.
 - **Optional STR revenue estimate:** Financial Analysis checks Supabase for a saved Airbtics summary without charge. A new report runs only after the user confirms the displayed `$0.10` cost, and the resulting ADR, occupancy, and annual gross-revenue estimate is stored immutably for reuse. Applying ADR and occupancy updates editable assumptions and runs only the local deterministic calculator.
 - **Phase 7 STR potential:** the Financial Dashboard exposes an explicit **Evaluate STR potential** action. The [conditional evaluation workflow](docs/str-potential-evaluation.md) checks saved evidence first, evaluates listing facts, text, multiple photos, and comparable characteristics only on demand, then stores an immutable result with strengths, risks, missing evidence, improvement ideas, and rough cost ranges.
-- Comparable cards show the current observed nightly rate and a concise **Booked or blocked** percentage based on the actual number of calendar nights observed for that listing. This signal is not presented as occupancy.
-- Detailed ADR, selection controls, evidence summaries, and calendar actions are deferred to a broader stored-data analysis workspace.
+- Database-backed comparable cards show distance, home facts, guest capacity, rating, and Airbtics LTM ADR, occupancy, and revenue. The collection date is visible so historical estimates are not mistaken for live Airbnb prices.
 - Comparator runs, candidate evidence, dated rates, and calendar snapshots are stored server-side. Provider keys, raw payloads, database IDs, and Actor metadata do not cross the browser boundary.
 - The visible criteria use a maximum purchase budget and maximum improvement reserve; the hidden minimum purchase budget defaults to zero.
 - The backend can evaluate the latest snapshot of every stored Home as a batch and persist immutable evaluation history. A stored-listings screen remains deferred.
@@ -125,7 +121,7 @@ Automated tests use fixtures and injected repositories; they do not consume Apif
 - **Phases 1-2 complete:** application foundation, schema, provider ingestion, normalization, validation, deduplication, and immutable snapshots.
 - **Phase 3 complete:** shared workflow state, deterministic routing, LangGraph Home/Land execution, live Node API, and React integration.
 - **Phase 4 - Attention Screen:** criteria controls with approved application defaults, deterministic Attention/Confidence scoring, stored-home batch evaluation history, priority bands, and score-ranked results are complete. The optional stored-listings screen remains deferred.
-- **Phase 5 complete:** criteria-gated, Airbnb-backed comparable discovery, deterministic ranking, cached current-rate and calendar evidence, and a dedicated responsive workspace. Migration `20260830_0007_str_comparator.sql` is part of the required schema setup.
+- **Phase 5 complete:** criteria-gated, deterministic radius comparison from persisted Airbtics market evidence, radius-specific cached runs, and a paginated responsive workspace. Migrations `20260830_0007_str_comparator.sql` and `20260906_0014_airbtics_database_comparables.sql` are part of the required schema setup.
 - **Phase 6 complete for the current scope:** the validated calculator, editable Home workspace, immutable Supabase saves, and cash-on-cash-ranked Financial Dashboard are available. Scenario comparison remains deferred.
 - **Phase 7:** on-demand multimodal STR-potential evaluation, evidence-aware findings, improvement planning, and immutable evaluation history are implemented. Broader portfolio ranking and human review refinements remain future work.
 - **Later:** stored-listings workspace, weekly automation, and operational scheduling.

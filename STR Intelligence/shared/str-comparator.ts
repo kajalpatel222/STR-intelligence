@@ -2,6 +2,9 @@ import { rankComparableCandidates } from "./str-comparator-ranking.js";
 
 export type Coordinates = Readonly<{ latitude: number; longitude: number }>;
 
+export const COMPARATOR_RADIUS_MILES = [1, 2, 5, 10] as const;
+export type ComparatorRadiusMiles = (typeof COMPARATOR_RADIUS_MILES)[number];
+
 export type ComparatorTarget = Readonly<{
   coordinates: Coordinates;
   bedrooms: number;

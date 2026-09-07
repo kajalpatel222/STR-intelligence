@@ -37,6 +37,8 @@ export function normalizeAirbticsListingPage(payload: unknown, gateway: Yosemite
     return [Object.freeze({
       listingUrl: `https://www.airbnb.com/rooms/${encodeURIComponent(listingId)}`,
       name,
+      latitude: coordinate(row.latitude, -90, 90),
+      longitude: coordinate(row.longitude, -180, 180),
       gateway,
       propertyType: providerText(row.property_type), roomType: providerText(row.room_type), bedrooms: providerText(row.bedrooms),
       bathrooms: number(row.bathrooms), accommodates: number(row.accommodates),
@@ -55,5 +57,9 @@ function record(value: unknown): Record<string, unknown> { return value && typeo
 function text(value: unknown) { return typeof value === "string" && value.trim() ? value.trim() : undefined; }
 function providerText(value: unknown) { const candidate = typeof value === "number" ? String(value) : text(value); return candidate && candidate !== "-1" ? candidate : undefined; }
 function number(value: unknown) { return typeof value === "number" && Number.isFinite(value) ? value : undefined; }
+function coordinate(value: unknown, minimum: number, maximum: number) {
+  const candidate = number(value);
+  return candidate !== undefined && candidate >= minimum && candidate <= maximum ? candidate : undefined;
+}
 function safeUrl(value: unknown) { const candidate = text(value); if (!candidate) return undefined; try { const url = new URL(candidate); return url.protocol === "https:" ? url.toString() : undefined; } catch { return undefined; } }
 function booleanRecord(value: unknown) { return Object.freeze(Object.fromEntries(Object.entries(record(value)).filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean"))); }

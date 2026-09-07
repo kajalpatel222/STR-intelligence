@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="2000" viewBox="0 0 1600 2000" role="img" aria-labelledby="title desc">
+  <title id="title">STR Intelligence agentic system map</title>
+  <desc id="desc">A hand-drawn style architecture diagram showing conversational property discovery, deterministic routing, property ingestion, attention scoring, retrieval-first short-term-rental comparisons, financial analysis, and conditional multimodal evaluation.</desc>
+  <defs>
+    <filter id="paper" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="2" seed="7" result="noise"/>
+      <feColorMatrix in="noise" type="saturate" values="0" result="gray"/>
+      <feComponentTransfer in="gray" result="faint"><feFuncA type="table" tableValues="0 0.035"/></feComponentTransfer>
+      <feBlend in="SourceGraphic" in2="faint" mode="multiply"/>
+    </filter>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#173c32" flood-opacity="0.10"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto">
+      <path d="M1 1 L10 6 L1 11" fill="none" stroke="#1f6954" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <style>
+      .bg{fill:#fbfaf5}.ink{fill:#172720}.muted{fill:#5e6d66}.green{fill:#1f6954}.orange{fill:#a75d20}.small{font:600 22px 'Avenir Next','Trebuchet MS',sans-serif}.tiny{font:600 18px 'Avenir Next','Trebuchet MS',sans-serif}.body{font:500 25px 'Avenir Next','Trebuchet MS',sans-serif}.label{font:800 22px 'Avenir Next','Trebuchet MS',sans-serif;letter-spacing:1.5px}.heading{font:800 41px 'Avenir Next','Trebuchet MS',sans-serif}.title{font:900 70px 'Avenir Next','Trebuchet MS',sans-serif;letter-spacing:-2px}.card{fill:#fffef9;stroke:#8aa69a;stroke-width:3;rx:26;filter:url(#shadow)}.soft{fill:#e3f0e9;stroke:#6c9685;stroke-width:2.5;rx:22}.warm{fill:#f7e7d5;stroke:#d49763;stroke-width:2.5;rx:22}.gray{fill:#f0f1ec;stroke:#b9c2bc;stroke-width:2.5;rx:22}.dash{fill:none;stroke:#6b7b74;stroke-width:2.5;stroke-dasharray:10 10;stroke-linecap:round}.flow{fill:none;stroke:#1f6954;stroke-width:4;stroke-linecap:round;stroke-linejoin:round;marker-end:url(#arrow)}.sketch{fill:none;stroke:#172720;stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round}.pattern{fill:#fff4e7;stroke:#bd7138;stroke-width:2.2;rx:18}.patternText{font:800 19px 'Avenir Next','Trebuchet MS',sans-serif;fill:#934814;letter-spacing:.5px}.num{font:900 26px 'Avenir Next','Trebuchet MS',sans-serif;fill:#fff}.white{fill:#fff}.center{text-anchor:middle}.right{text-anchor:end}
+    </style>
+  </defs>
+  <rect width="1600" height="2000" class="bg" filter="url(#paper)"/>
+
+  <!-- Header -->
+  <text x="80" y="92" class="label green">WEEK 3 · AGENTIC AI IN PRACTICE</text>
+  <text x="80" y="178" class="title ink">How STR Intelligence thinks</text>
+  <text x="82" y="224" class="body muted">One guided path from a property-search sentence to evidence-backed investment decisions.</text>
+  <path d="M82 252 C360 245 610 260 887 250 S1280 252 1518 248" class="dash"/>
+
+  <!-- Step 1 -->
+  <circle cx="105" cy="337" r="29" fill="#1f6954"/><text x="105" y="346" class="num center">1</text>
+  <text x="155" y="326" class="heading ink">Ask naturally</text>
+  <text x="155" y="361" class="small muted">React turns the request into a typed search draft.</text>
+  <rect x="84" y="392" width="470" height="112" class="card"/>
+  <path d="M124 432 q0-20 20-20 h330 q20 0 20 20 v26 q0 20-20 20 h-300 l-34 22 8-22 h-4 q-20 0-20-20z" class="sketch"/>
+  <text x="152" y="453" class="body ink">“3+ bedroom homes under</text><text x="152" y="485" class="body ink">$350K near Mariposa”</text>
+  <rect x="592" y="405" width="300" height="82" class="soft"/>
+  <text x="742" y="438" class="label green center">VALIDATED REQUEST</text>
+  <text x="742" y="468" class="tiny muted center">location · type · filters · limit</text>
+  <path d="M555 448 C570 440 575 445 586 446" class="flow"/>
+  <rect x="970" y="396" width="510" height="100" class="pattern"/>
+  <text x="995" y="430" class="patternText">PATTERN 01 · DETERMINISTIC ROUTING</text>
+  <text x="995" y="463" class="small ink">LangGraph chooses Home, Land, or Invalid.</text>
+  <text x="995" y="489" class="tiny muted">TypeScript owns the rules—not an LLM.</text>
+
+  <path d="M742 505 C740 526 740 532 740 548" class="flow"/>
+
+  <!-- Step 2 -->
+  <circle cx="105" cy="591" r="29" fill="#1f6954"/><text x="105" y="600" class="num center">2</text>
+  <text x="155" y="580" class="heading ink">Collect trustworthy property evidence</text>
+  <text x="155" y="616" class="small muted">A source-agnostic pipeline contains provider errors and preserves history.</text>
+  <rect x="82" y="650" width="1436" height="186" class="card"/>
+  <g>
+    <rect x="116" y="694" width="188" height="88" class="warm"/><text x="210" y="730" class="label orange center">APIFY</text><text x="210" y="760" class="tiny muted center">Zillow actor</text>
+    <text x="334" y="749" class="heading green">→</text>
+    <rect x="386" y="694" width="190" height="88" class="soft"/><text x="481" y="746" class="label green center">NORMALIZE</text>
+    <text x="594" y="749" class="heading green">→</text>
+    <rect x="645" y="694" width="180" height="88" class="soft"/><text x="735" y="746" class="label green center">VALIDATE</text>
+    <text x="841" y="749" class="heading green">→</text>
+    <rect x="892" y="694" width="190" height="88" class="soft"/><text x="987" y="746" class="label green center">DEDUPLICATE</text>
+    <text x="1100" y="749" class="heading green">→</text>
+    <rect x="1154" y="694" width="318" height="88" class="soft"/><text x="1313" y="731" class="label green center">SAVE IMMUTABLY</text><text x="1313" y="762" class="tiny muted center">canonical property + snapshot</text>
+  </g>
+  <rect x="110" y="798" width="448" height="32" class="pattern"/><text x="334" y="820" class="patternText center">PATTERN 02 · SEQUENTIAL WORKFLOW</text>
+  <text x="590" y="820" class="tiny muted">Each stage updates typed shared state and leaves evidence for the next.</text>
+
+  <!-- Shared memory spine -->
+  <rect x="1230" y="875" width="288" height="562" class="soft"/>
+  <path d="M1280 936 h188 v124 h-188z M1280 956 q94 36 188 0 M1280 993 q94 36 188 0 M1280 1030 q94 36 188 0" class="sketch"/>
+  <text x="1374" y="1107" class="heading green center">Supabase</text>
+  <text x="1374" y="1144" class="small muted center">shared memory</text>
+  <text x="1265" y="1202" class="tiny ink">• listing snapshots</text>
+  <text x="1265" y="1236" class="tiny ink">• criteria + scores</text>
+  <text x="1265" y="1270" class="tiny ink">• STR comparisons</text>
+  <text x="1265" y="1304" class="tiny ink">• financial versions</text>
+  <text x="1265" y="1338" class="tiny ink">• STR evaluations</text>
+  <text x="1265" y="1391" class="tiny muted">Cross-session memory.</text>
+  <text x="1265" y="1420" class="tiny muted">Append-only evidence.</text>
+
+  <!-- Step 3 -->
+  <circle cx="105" cy="910" r="29" fill="#1f6954"/><text x="105" y="919" class="num center">3</text>
+  <text x="155" y="899" class="heading ink">Screen every Home transparently</text>
+  <text x="155" y="935" class="small muted">Investment criteria feed deterministic—not generative—decision support.</text>
+  <rect x="82" y="974" width="1090" height="170" class="card"/>
+  <rect x="112" y="1010" width="268" height="95" class="gray"/>
+  <text x="246" y="1048" class="label ink center">USER CRITERIA</text><text x="246" y="1080" class="tiny muted center">budget · reserve · mode</text>
+  <path d="M392 1058 C415 1055 429 1055 446 1057" class="flow"/>
+  <rect x="460" y="1009" width="322" height="96" class="soft"/>
+  <text x="621" y="1046" class="label green center">ATTENTION EVALUATOR</text><text x="621" y="1079" class="tiny muted center">score · confidence · reasons</text>
+  <path d="M797 1058 C820 1054 833 1055 851 1057" class="flow"/>
+  <rect x="866" y="1009" width="270" height="96" class="warm"/>
+  <text x="1001" y="1041" class="label orange center">PRIORITY BAND</text><text x="1001" y="1072" class="tiny muted center">Review now → Ineligible</text>
+  <rect x="112" y="1113" width="426" height="32" class="pattern"/><text x="325" y="1135" class="patternText center">PATTERN 03 · EXPLAINABLE EVALUATION</text>
+  <path d="M1172 1058 C1198 1058 1205 1058 1225 1058" class="flow"/>
+
+  <!-- Step 4 comparator -->
+  <circle cx="105" cy="1215" r="29" fill="#1f6954"/><text x="105" y="1224" class="num center">4</text>
+  <text x="155" y="1204" class="heading ink">Compare nearby STRs only when requested</text>
+  <text x="155" y="1240" class="small muted">The workflow checks saved evidence before spending provider credits.</text>
+  <rect x="82" y="1276" width="1090" height="260" class="card"/>
+  <rect x="112" y="1313" width="245" height="74" class="gray"/><text x="234" y="1359" class="label ink center">COMPARE CLICK</text>
+  <path d="M370 1350 C393 1347 405 1348 425 1349" class="flow"/>
+  <polygon points="520,1308 625,1350 520,1392 415,1350" fill="#e3f0e9" stroke="#6c9685" stroke-width="2.5"/>
+  <text x="520" y="1344" class="tiny green center">SAVED</text><text x="520" y="1369" class="tiny green center">EVIDENCE?</text>
+  <path d="M625 1350 C658 1350 677 1350 703 1350" class="flow"/>
+  <rect x="714" y="1313" width="410" height="74" class="soft"/><text x="919" y="1342" class="label green center">FRESH → REUSE NOW</text><text x="919" y="1370" class="tiny muted center">no new paid Actor call</text>
+  <path d="M520 1392 C519 1420 520 1434 520 1452" class="flow"/>
+  <rect x="310" y="1456" width="420" height="58" class="warm"/><text x="520" y="1493" class="small orange center">MISS / STALE → Airbnb actor → rank 5</text>
+  <rect x="744" y="1456" width="380" height="58" class="soft"/><text x="934" y="1493" class="small green center">save comparison + return cards</text>
+  <path d="M730 1485 C735 1484 737 1484 740 1484" class="flow"/>
+  <rect x="112" y="1287" width="464" height="32" class="pattern"/><text x="344" y="1309" class="patternText center">PATTERN 04 · RETRIEVAL-FIRST / CACHE-ASIDE</text>
+  <path d="M1172 1425 C1200 1422 1207 1415 1227 1404" class="flow"/>
+
+  <!-- Step 5 -->
+  <circle cx="105" cy="1606" r="29" fill="#1f6954"/><text x="105" y="1615" class="num center">5</text>
+  <text x="155" y="1595" class="heading ink">Deepen the decision—without surrendering control</text>
+  <text x="155" y="1631" class="small muted">Two explicit user actions unlock two different kinds of analysis.</text>
+  <rect x="82" y="1670" width="680" height="214" class="card"/>
+  <text x="120" y="1712" class="label green">FINANCIAL ANALYSIS</text>
+  <text x="120" y="1751" class="small ink">Editable assumptions → deterministic calculator</text>
+  <text x="120" y="1787" class="tiny muted">cash flow · cash-on-cash · cap rate · DSCR</text>
+  <text x="120" y="1818" class="tiny muted">break-even occupancy · immutable saved version</text>
+  <rect x="120" y="1834" width="382" height="32" class="pattern"/><text x="311" y="1856" class="patternText center">PATTERN 05 · TOOL USE + HUMAN-IN-THE-LOOP</text>
+
+  <rect x="800" y="1670" width="718" height="214" class="card"/>
+  <text x="838" y="1712" class="label orange">STR POTENTIAL</text>
+  <text x="838" y="1751" class="small ink">Fresh cache? Enough evidence? Only then call the model.</text>
+  <text x="838" y="1787" class="tiny muted">listing facts + text + photos + comparable characteristics</text>
+  <text x="838" y="1818" class="tiny muted">OpenRouter returns grounded strengths, risks, and ideas</text>
+  <rect x="838" y="1834" width="504" height="32" class="pattern"/><text x="1090" y="1856" class="patternText center">PATTERN 06 · CONDITIONAL MULTIMODAL EVALUATION</text>
+  <path d="M1374 1438 C1374 1510 1350 1560 1298 1663" class="flow"/>
+
+  <!-- Footer mental model -->
+  <path d="M82 1918 C400 1910 691 1926 1010 1915 S1320 1920 1518 1914" class="dash"/>
+  <text x="82" y="1958" class="label orange">THE MENTAL MODEL</text>
+  <text x="355" y="1958" class="tiny ink">Deterministic where correctness matters. Agentic where orchestration helps. Generative only where interpretation adds value.</text>
+  <text x="1518" y="1985" class="tiny muted right">Kajal Patel · STR Intelligence</text>
+</svg>

@@ -1,5 +1,6 @@
 import type { StrComparisonRepositoryPort, StoredComparison } from "../str-comparator/repository.js";
 import { initializeStrComparatorWorkflowState, type StrComparatorWorkflowState } from "../workflow/str-comparator-graph.js";
+import { COMPARATOR_RADIUS_MILES, type ComparatorRadiusMiles } from "../../shared/str-comparator.js";
 
 type GraphInvoker = Readonly<{ invoke(input: { workflowState: StrComparatorWorkflowState }): Promise<{ workflowState: StrComparatorWorkflowState }> }>;
 
@@ -16,8 +17,10 @@ export function createStrComparisonsHandler(graph: GraphInvoker, repository: Str
     async create(input: unknown, refresh = false) {
       const body = asRecord(input);
       if (!isZillowUrl(body.listingUrl)) return response(400, { status: "invalid", message: "Choose a valid Home listing." });
-      return once(`discover:${body.listingUrl}`, async () => {
-        const result = await graph.invoke({ workflowState: initializeStrComparatorWorkflowState({ workflowId: crypto.randomUUID(), intent: "discover", listingUrl: body.listingUrl as string, bypassCache: refresh }) });
+      const radiusMiles = isComparatorRadius(body.radiusMiles) ? body.radiusMiles : body.radiusMiles === undefined ? 1 : undefined;
+      if (!radiusMiles) return response(400, { status: "invalid", message: "Choose a search radius of 1, 2, 5, or 10 miles." });
+      return once(`discover:${body.listingUrl}:${radiusMiles}`, async () => {
+        const result = await graph.invoke({ workflowState: initializeStrComparatorWorkflowState({ workflowId: crypto.randomUUID(), intent: "discover", listingUrl: body.listingUrl as string, radiusMiles, bypassCache: refresh }) });
         if (!result.workflowState.comparisonReference) return response(503, { status: "unavailable", message: "Comparable stays are temporarily unavailable. Please try again." });
         return this.get(result.workflowState.comparisonReference);
       });
@@ -84,6 +87,7 @@ export function toPublicComparison(stored: StoredComparison) {
     status: stored.status,
     comparisonReference: stored.publicReference,
     lastCheckedAt: stored.completedAt,
+    radiusMiles: stored.radiusMiles ?? 1,
     target: {
       listingUrl: stored.target.listingUrl,
       address: stored.target.address, city: stored.target.city, state: stored.target.state, postalCode: stored.target.postalCode,
@@ -97,6 +101,8 @@ export function toPublicComparison(stored: StoredComparison) {
       guestCapacity: item.guestCapacity, rating: item.rating, reviewCount: item.reviewCount, isSuperhost: item.isSuperhost,
       amenities: item.amenities.slice(0, 12), observedNightlyPriceUsd: item.observedNightlyPriceUsd,
       observedCheckIn: item.observedCheckIn, observedCheckOut: item.observedCheckOut, similarityScore: item.similarityScore,
+      adrLtmUsd: item.adrLtmUsd, occupancyLtmPercent: item.occupancyLtmPercent,
+      annualRevenueLtmUsd: item.annualRevenueLtmUsd, marketCollectedAt: item.marketCollectedAt,
       matchReasons: item.matchReasons, included: item.included, estimatedAdrUsd: item.estimatedAdrUsd,
       rateMinimumUsd: item.rateMinimumUsd, rateMaximumUsd: item.rateMaximumUsd,
       rateObservationCount: item.rateObservationCount, calendarUnavailablePercentage: item.calendarUnavailablePercentage,
@@ -105,6 +111,10 @@ export function toPublicComparison(stored: StoredComparison) {
       calendarObservedAt: item.calendarObservedAt,
     })),
   };
+}
+
+function isComparatorRadius(value: unknown): value is ComparatorRadiusMiles {
+  return typeof value === "number" && COMPARATOR_RADIUS_MILES.includes(value as ComparatorRadiusMiles);
 }
 
 function publicSummary(value: unknown) {

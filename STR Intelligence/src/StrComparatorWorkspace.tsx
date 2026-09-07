@@ -1,4 +1,5 @@
 import React, { useState, type CSSProperties } from "react";
+import { COMPARATOR_RADIUS_MILES, type ComparatorRadiusMiles } from "../shared/str-comparator.js";
 import {
   strComparatorClient,
   type StrComparatorClient,
@@ -27,13 +28,17 @@ export function StrComparatorWorkspace({
   const [comparison, setComparison] = useState(initialComparison);
   const [activity, setActivity] = useState<Activity>("idle");
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
+  const [radiusMiles, setRadiusMiles] = useState<ComparatorRadiusMiles>(initialComparison?.radiusMiles ?? 1);
 
-  async function discover() {
+  async function discover(nextRadius = radiusMiles) {
     setActivity("discovering");
     setError("");
     try {
-      const result = await client.discover(listingUrl);
+      const result = await client.discover(listingUrl, nextRadius);
       setComparison(result);
+      setRadiusMiles(result.radiusMiles ?? nextRadius);
+      setPage(1);
     } catch (reason) {
       setError(message(reason, "We could not find comparable stays. Try discovery again."));
     } finally {
@@ -66,9 +71,9 @@ export function StrComparatorWorkspace({
       </header>
 
       {!comparison && <section style={styles.startPanel} aria-labelledby="discovery-title">
-        <h2 id="discovery-title" style={styles.sectionTitle}>Find the five strongest comparables</h2>
-        <p style={styles.lede}>Find nearby entire-home stays ranked by location, capacity, and property fit.</p>
-        <button type="button" style={styles.primaryButton} onClick={discover} disabled={activity !== "idle"}>
+        <h2 id="discovery-title" style={styles.sectionTitle}>Find nearby STR comparables</h2>
+        <p style={styles.lede}>Load saved entire-home market listings within {formatRadius(radiusMiles)}.</p>
+        <button type="button" style={styles.primaryButton} onClick={() => void discover()} disabled={activity !== "idle"}>
           {activity === "discovering" ? "Finding comparables…" : "Find comparables"}
         </button>
       </section>}
@@ -76,25 +81,44 @@ export function StrComparatorWorkspace({
       {error && <div role="alert" style={styles.error}>
         <strong>Comparator unavailable.</strong> {error}
       </div>}
-      {activity !== "idle" && <p role="status" aria-live="polite" style={styles.hint}>Reviewing nearby stays and selecting the strongest matches…</p>}
+      {activity !== "idle" && <p role="status" aria-live="polite" style={styles.hint}>Loading nearby stays from saved market data…</p>}
 
       {comparison && <>
         <section className="str-comparator__stage-header" style={styles.stageHeader} aria-labelledby="shortlist-title">
           <div>
             <p style={styles.step}>Nearby stays</p>
             <h2 id="shortlist-title" style={styles.sectionTitle}>STR comparables</h2>
-            <p style={styles.hint}>{Math.min(comparison.candidates.length, 5)} strongest property matches.</p>
+            <p style={styles.hint}>{comparison.candidates.length} entire-home {comparison.candidates.length === 1 ? "listing" : "listings"} within {formatRadius(comparison.radiusMiles ?? 1)}.</p>
           </div>
-          {cachedAt && <p style={styles.cache}>Cached {cachedAt}</p>}
+          <div className="str-comparator__radius-area">
+            <label className="str-comparator__radius-control" htmlFor="comparator-radius">
+              <span>Search radius</span>
+              <select id="comparator-radius" value={radiusMiles} disabled={activity !== "idle"} onChange={(event) => {
+                const nextRadius = Number(event.target.value) as ComparatorRadiusMiles;
+                setRadiusMiles(nextRadius);
+                void discover(nextRadius);
+              }}>
+                {COMPARATOR_RADIUS_MILES.map((radius) => <option key={radius} value={radius}>{formatRadius(radius)}</option>)}
+              </select>
+            </label>
+            {cachedAt && <p style={styles.cache}>Cached {cachedAt}</p>}
+          </div>
         </section>
 
         {comparison.candidates.length === 0 ? <div style={styles.empty} role="status">
           <strong>No eligible comparables found.</strong>
           <span>Try discovery again later as nearby listing inventory changes.</span>
-          <button type="button" style={styles.secondaryButton} onClick={discover} disabled={activity !== "idle"}>Run discovery again</button>
-        </div> : <div style={styles.grid}>
-          {comparison.candidates.slice(0, 5).map((candidate, index) => <StrComparableCard key={candidate.providerListingKey ?? candidate.listingUrl} candidate={candidate} rank={index + 1} onRefreshCalendar={async () => setComparison(await client.refreshCalendar(comparison.publicReference, candidate.listingUrl))} />)}
-        </div>}
+          <button type="button" style={styles.secondaryButton} onClick={() => void discover()} disabled={activity !== "idle"}>Run discovery again</button>
+        </div> : <>
+          <div style={styles.grid}>
+            {comparison.candidates.slice((page - 1) * 10, page * 10).map((candidate, index) => <StrComparableCard key={candidate.providerListingKey ?? candidate.listingUrl} candidate={candidate} rank={(page - 1) * 10 + index + 1} />)}
+          </div>
+          {comparison.candidates.length > 10 && <nav className="str-comparator__pagination" aria-label="Comparable result pages">
+            <button type="button" disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>
+            <span>Page {page} of {Math.ceil(comparison.candidates.length / 10)}</span>
+            <button type="button" disabled={page >= Math.ceil(comparison.candidates.length / 10)} onClick={() => setPage((value) => Math.min(Math.ceil(comparison.candidates.length / 10), value + 1))}>Next</button>
+          </nav>}
+        </>}
       </>}
     </main>
   );
@@ -102,6 +126,10 @@ export function StrComparatorWorkspace({
 
 function message(reason: unknown, fallback: string) {
   return reason instanceof Error && reason.message ? reason.message : fallback;
+}
+
+function formatRadius(radius: ComparatorRadiusMiles) {
+  return `${radius} ${radius === 1 ? "mile" : "miles"}`;
 }
 
 const colors = { ink: "#17211b", muted: "#5d6b61", paper: "#f7f4ec", white: "#fffdf8", green: "#234b35", line: "#d8d3c7", rust: "#9a3f25" } as const;

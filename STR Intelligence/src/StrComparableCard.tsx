@@ -12,6 +12,7 @@ export function StrComparableCard({ candidate, rank, context, footer, onRefreshC
   const [calendarWindowDays, setCalendarWindowDays] = useState<CalendarWindowDays>(15);
   const [refreshStatus, setRefreshStatus] = useState<"idle" | "refreshing" | "error">("idle");
   const calendarMetric = candidate.calendarWindows?.find((item) => item.days === calendarWindowDays);
+  const hasMarketMetrics = candidate.adrLtmUsd !== undefined || candidate.occupancyLtmPercent !== undefined || candidate.annualRevenueLtmUsd !== undefined;
   async function refreshCalendar(event: React.MouseEvent<HTMLButtonElement>) {
     event.stopPropagation();
     if (!onRefreshCalendar || refreshStatus === "refreshing") return;
@@ -25,19 +26,29 @@ export function StrComparableCard({ candidate, rank, context, footer, onRefreshC
       <div className="str-comparator__title-row"><h3><a href={candidate.listingUrl} target="_blank" rel="noreferrer">{candidate.title ?? `Comparable ${rank}`}</a></h3></div>
       <p className="str-comparator__home-facts">{[candidate.roomType ?? candidate.propertyType ?? "Entire home", formatBedroomBathroomCount(candidate.bedrooms, "bedroom"), formatBedroomBathroomCount(candidate.bathrooms, "bathroom")].filter(Boolean).join(" · ")}</p>
       <dl className="str-comparator__quick-facts">
-        <div><dt>Current rate</dt><dd>{formatComparatorCurrency(candidate.observedNightlyPriceUsd)}<small>/night</small></dd></div>
+        <div><dt>Distance</dt><dd>{candidate.distanceMiles.toFixed(1)} mi</dd></div>
         <div><dt>Guests</dt><dd>{candidate.guestCapacity ? `Sleeps ${candidate.guestCapacity}` : "Not listed"}</dd></div>
         <div><dt>Rating</dt><dd>{candidate.rating ? `★ ${candidate.rating.toFixed(2)}${candidate.reviewCount !== undefined ? ` (${candidate.reviewCount})` : ""}` : "Not rated"}</dd></div>
       </dl>
       {context && <p className="str-comparator__context">{context}</p>}
-      <div className="str-comparator__calendar-control">
+      {hasMarketMetrics ? <div className="str-comparator__market-metrics">
+        <dl>
+          <div><dt>LTM ADR</dt><dd>{formatComparatorCurrency(candidate.adrLtmUsd)}</dd></div>
+          <div><dt>LTM occupancy</dt><dd>{formatComparatorPercent(candidate.occupancyLtmPercent)}</dd></div>
+          <div><dt>LTM revenue</dt><dd>{formatComparatorCurrency(candidate.annualRevenueLtmUsd)}</dd></div>
+        </dl>
+        <small>{candidate.marketCollectedAt ? `Market data collected ${formatComparatorDate(candidate.marketCollectedAt)}` : "Saved market data"}</small>
+      </div> : <>
+        {candidate.observedNightlyPriceUsd !== undefined && <div className="str-comparator__current-rate"><span>Current rate</span><strong>{formatComparatorCurrency(candidate.observedNightlyPriceUsd)}<small>/night</small></strong></div>}
+        <div className="str-comparator__calendar-control">
         <div className="str-comparator__calendar-row">
           {calendarMetric ? <div className="str-comparator__booking-metric"><span>Booked or blocked</span><strong>{formatComparatorPercent(calendarMetric.unavailablePercentage)}</strong><small>Based on {calendarMetric.observationCount} nights</small></div> : <p className="str-comparator__calendar-empty">Not enough calendar data for this window.</p>}
           <CalendarWindowSelect id={`calendar-window-${rank}-${safeId(candidate.listingUrl)}`} value={calendarWindowDays} onChange={setCalendarWindowDays} />
         </div>
         <div className="str-comparator__calendar-meta"><small>{candidate.calendarObservedAt ? `Checked ${formatComparatorDate(candidate.calendarObservedAt)}` : "No collection date"}</small>{onRefreshCalendar && <button type="button" onClick={refreshCalendar} disabled={refreshStatus === "refreshing"}>{refreshStatus === "refreshing" ? "Refreshing…" : "Refresh"}</button>}</div>
         {refreshStatus === "error" && <p className="str-comparator__calendar-error" role="alert">Calendar could not be refreshed. Saved data is unchanged.</p>}
-      </div>
+        </div>
+      </>}
       <details className="str-comparator__details"><summary>Why this match</summary><p>{candidate.matchReasons.length ? candidate.matchReasons.join(" · ") : "Ranked by distance and property similarity."}</p></details>
       {footer}
     </div>

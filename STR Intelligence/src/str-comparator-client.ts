@@ -1,4 +1,5 @@
 import type { ComparatorStatus, EvidenceConfidence } from "../shared/str-comparator.js";
+import type { ComparatorRadiusMiles } from "../shared/str-comparator.js";
 
 export type StrComparatorTargetDto = Readonly<{
   listingUrl: string;
@@ -29,9 +30,13 @@ export type StrComparableDto = Readonly<{
   reviewCount?: number;
   isSuperhost?: boolean;
   amenities: readonly string[];
-  observedNightlyPriceUsd: number;
-  observedCheckIn: string;
-  observedCheckOut: string;
+  observedNightlyPriceUsd?: number;
+  observedCheckIn?: string;
+  observedCheckOut?: string;
+  adrLtmUsd?: number;
+  occupancyLtmPercent?: number;
+  annualRevenueLtmUsd?: number;
+  marketCollectedAt?: string;
   similarityScore: number;
   matchReasons: readonly string[];
   observedAt?: string;
@@ -64,6 +69,7 @@ export type StrComparatorMarketDto = Readonly<{
 
 export type StrComparisonDto = Readonly<{
   publicReference: string;
+  radiusMiles?: ComparatorRadiusMiles;
   status: ComparatorStatus | string;
   stage: "discovery" | "calendar" | "complete" | string;
   completedAt?: string;
@@ -78,7 +84,7 @@ export type StrComparisonDto = Readonly<{
 }>;
 
 export interface StrComparatorClient {
-  discover(listingUrl: string): Promise<StrComparisonDto>;
+  discover(listingUrl: string, radiusMiles?: ComparatorRadiusMiles): Promise<StrComparisonDto>;
   analyze(publicReference: string, listingUrls: readonly string[]): Promise<StrComparisonDto>;
   updateSelections(publicReference: string, listingUrls: readonly string[]): Promise<StrComparisonDto>;
   refreshCalendar(publicReference: string, listingUrl: string): Promise<StrComparisonDto>;
@@ -86,10 +92,10 @@ export interface StrComparatorClient {
 
 type Fetcher = typeof fetch;
 
-export async function discoverStrComparables(listingUrl: string, fetcher: Fetcher = fetch): Promise<StrComparisonDto> {
+export async function discoverStrComparables(listingUrl: string, radiusMiles: ComparatorRadiusMiles = 1, fetcher: Fetcher = fetch): Promise<StrComparisonDto> {
   return requestComparison("/api/str-comparisons", {
     method: "POST",
-    body: JSON.stringify({ listingUrl }),
+    body: JSON.stringify({ listingUrl, radiusMiles }),
   }, fetcher, "Comparable discovery could not be completed.");
 }
 
@@ -158,6 +164,7 @@ type PublicComparisonResponse = Readonly<{
   message?: string;
   status: string;
   comparisonReference: string;
+  radiusMiles?: ComparatorRadiusMiles;
   lastCheckedAt?: string;
   target: StrComparatorTargetDto;
   summary?: StrComparisonDto["summary"];
@@ -170,6 +177,7 @@ function normalizePublicComparison(response: PublicComparisonResponse): StrCompa
   );
   return {
     publicReference: response.comparisonReference,
+    radiusMiles: response.radiusMiles ?? 1,
     status: response.status,
     stage: hasEvidence ? "complete" : "discovery",
     completedAt: response.lastCheckedAt,

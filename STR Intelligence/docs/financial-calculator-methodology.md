@@ -77,7 +77,7 @@ When a ratio has a zero denominator, the calculator returns `null`, not zero, `I
 
 ## Comparator Boundary
 
-Stored STR comparables are supporting evidence only. Their observed rates may provide future context, but Phase 6.1 does not infer or populate expected ADR or occupancy from comparator data. In particular, the **Booked or blocked** calendar signal is not verified occupancy.
+Stored STR comparables are supporting evidence only. Saved Airbtics LTM ADR, occupancy, and revenue estimates may provide context, but Phase 6.1 does not infer or populate financial assumptions from comparator data. These third-party market estimates are not verified host financial statements.
 
 ## Saved Analysis Boundary
 

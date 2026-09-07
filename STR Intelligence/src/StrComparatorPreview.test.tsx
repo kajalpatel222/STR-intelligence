@@ -7,6 +7,7 @@ import type { StrComparisonDto } from "./str-comparator-client.js";
 
 const comparison: StrComparisonDto = {
   publicReference: "comparison-reference",
+  radiusMiles: 10,
   status: "discovered",
   stage: "discovery",
   target: { listingUrl: "https://example.com/target" },
@@ -38,6 +39,7 @@ test("renders a compact linked shortlist and one details action", () => {
   );
 
   assert.match(markup, /Nearby short-term rentals/);
+  assert.match(markup, /within 10 miles/);
   assert.match(markup, /Pine View Retreat/);
   assert.match(markup, /href="https:\/\/example.com\/stay-one"/);
   assert.match(markup, /src="https:\/\/images.example.com\/stay-one.jpg"/);

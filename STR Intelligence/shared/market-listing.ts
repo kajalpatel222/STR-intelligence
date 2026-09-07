@@ -4,6 +4,8 @@ export type YosemiteGateway = typeof YOSEMITE_GATEWAYS[number];
 export type MarketListing = Readonly<{
   listingUrl: string;
   name: string;
+  latitude?: number;
+  longitude?: number;
   gateway: YosemiteGateway;
   gateways?: readonly YosemiteGateway[];
   propertyType?: string;
